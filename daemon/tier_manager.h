@@ -33,7 +33,7 @@ class TierManager {
 public:
     TierManager(int target_pid);
     
-    void detect_accesses(class PerfSampler& sampler);
+    void detect_accesses(class EbpfSampler& sampler);
     void update_page_nodes();
     void migrate_pages(const std::vector<uintptr_t>& pages, int target_node);
     

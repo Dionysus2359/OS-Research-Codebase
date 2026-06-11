@@ -1,4 +1,5 @@
 #include "tier_manager.h"
+#include "ebpf_sampler.h"
 #include <iostream>
 #include <fcntl.h>
 #include <unistd.h>
@@ -7,7 +8,7 @@
 #include <cerrno>
 #include <cstring>
 #include <algorithm>
-#include "perf_sampler.h"
+
 
 using namespace std;
 using namespace std::chrono;
@@ -18,7 +19,7 @@ TierManager::TierManager(int target_pid)
          << ". Pages will be discovered dynamically via PEBS." << endl;
 }
 
-void TierManager::detect_accesses(PerfSampler& sampler) {
+void TierManager::detect_accesses(EbpfSampler& sampler) {
     auto now = duration_cast<milliseconds>(steady_clock::now().time_since_epoch()).count();
     
     // Save previous smooth_frequency for momentum; reset accessed flag
@@ -135,8 +136,10 @@ void TierManager::update_page_nodes() {
             i++;
         }
     } else {
-        cerr << "[TierManager] WARNING: move_pages query failed (ret=" << ret 
-             << ", errno=" << errno << ": " << strerror(errno) << ")" << endl;
+        if (errno != ESRCH) {
+            cerr << "[TierManager] WARNING: move_pages query failed (ret=" << ret 
+                 << ", errno=" << errno << ": " << strerror(errno) << ")" << endl;
+        }
         // Keep previous fast_tier_count as-is
     }
 }
@@ -174,9 +177,9 @@ void TierManager::migrate_pages(const vector<uintptr_t>& pages, int target_node)
         else epoch_demotions += succeeded;
     }
     
-    if (result != 0) {
+    if (result != 0 && errno != ESRCH) {
         cerr << "[TierManager] migrate_pages partial failure: " << succeeded 
-             << "/" << pages.size() << " succeeded" << endl;
+             << "/" << pages.size() << " succeeded (errno=" << errno << ")" << endl;
     }
 }
 

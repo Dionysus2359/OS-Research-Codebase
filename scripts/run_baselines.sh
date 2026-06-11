@@ -15,6 +15,9 @@ RESULTS_DIR="${PROJECT_ROOT}/results"
 
 mkdir -p "$RESULTS_DIR"
 
+# Force the kernel ceiling up before the run to prevent PMU auto-throttling
+sudo sysctl -w kernel.perf_event_max_sample_rate=50000 > /dev/null 2>&1
+
 cleanup() {
     echo "[*] Cleaning up system state..."
     sudo killall daemon 2>/dev/null || true

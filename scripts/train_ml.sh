@@ -7,6 +7,9 @@ echo "=========================================="
 echo "Phase 3: ML Offline Training (Decaying LFU)"
 echo "=========================================="
 
+# Force the kernel ceiling up before the run to prevent PMU auto-throttling
+sudo sysctl -w kernel.perf_event_max_sample_rate=50000 > /dev/null 2>&1
+
 echo "[*] Compiling workload and daemon..."
 make -C ../workload clean && make -C ../workload
 make -C ../daemon clean && make -C ../daemon LOCAL_DEV=1

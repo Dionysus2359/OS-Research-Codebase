@@ -3,3 +3,6 @@ walkthrough, explanations etc/
 ml/trace_decaying_lfu.csv
 qemu/
 results/
+daemon/bpf/vmlinux.h
+daemon/bpf/*.skel.h
+daemon/bpf/*.bpf.o

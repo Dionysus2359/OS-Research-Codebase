@@ -1,12 +1,13 @@
 #include "tier_manager.h"
 #include "policy.h"
+#include "ebpf_sampler.h"
 #include "../workload/workload.h"
 #include <iostream>
 #include <fstream>
 #include <string>
 #include <unistd.h>
 #include <chrono>
-#include "perf_sampler.h"
+
 #include <sys/types.h>
 #include <signal.h>
 
@@ -85,7 +86,7 @@ int main(int argc, char* argv[]) {
     cerr << "[Daemon] Workload detected (guest phase=" << info.current_phase << ")" << endl;
 
     TierManager mgr(target_pid);
-    PerfSampler sampler(target_pid);
+    EbpfSampler sampler(target_pid);
     
     if (!sampler.discover_workload_regions()) {
         cerr << "[Daemon] Failed to discover workload memory regions." << endl;
