@@ -1,25 +1,23 @@
 #!/bin/bash
 # run_baselines.sh
-# Automates the execution of all 4 Linux NUMA tiering baselines
+# Automates the execution of all Linux NUMA tiering baselines on Bare Metal
 # Usage: ./run_baselines.sh
 
 set -e
+trap 'kill $(jobs -p) 2>/dev/null; exit' INT TERM EXIT
 
-# Get the absolute path of the directory containing this script
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 PROJECT_ROOT="$(cd "$SCRIPT_DIR/.." && pwd)"
 
-# Absolute Paths
 WORKLOAD_DIR="${PROJECT_ROOT}/workload"
 DAEMON_DIR="${PROJECT_ROOT}/daemon"
 RESULTS_DIR="${PROJECT_ROOT}/results"
 
 mkdir -p "$RESULTS_DIR"
 
-# Helper to ensure system is clean
 cleanup() {
     echo "[*] Cleaning up system state..."
-    sudo killall daemon workload 2>/dev/null || true
+    sudo killall daemon 2>/dev/null || true
     sudo rm -f /tmp/workload_info
     sync && sudo sh -c 'echo 3 > /proc/sys/vm/drop_caches'
     sleep 2
@@ -27,25 +25,39 @@ cleanup() {
 
 run_daemon_baseline() {
     POLICY=$1
-    echo "=================================================="
+    echo "=========================================="
     echo "Running Baseline: $POLICY"
-    echo "=================================================="
+    echo "=========================================="
     cleanup
-    
-    # Ensure AutoNUMA is off for daemon-managed policies
+
     echo 0 | sudo tee /proc/sys/kernel/numa_balancing > /dev/null
+    echo never | sudo tee /sys/kernel/mm/transparent_hugepage/enabled > /dev/null
+
+    # Start workload in background (bound to Node 1 memory, Node 0 CPU)
+    numactl --membind=1 --cpubind=0 "$WORKLOAD_DIR/workload" &
+    WORKLOAD_PID=$!
     
-    # Start daemon in background (cout -> csv, cerr -> screen/log)
-    sudo "$DAEMON_DIR/daemon" "$POLICY" > "$RESULTS_DIR/results_${POLICY}.csv" 2> "$RESULTS_DIR/stderr_${POLICY}.log" &
+    # Wait for workload_info to appear
+    for i in $(seq 1 20); do
+        [ -f /tmp/workload_info ] && break
+        sleep 0.25
+    done
+
+    # Start daemon with workload PID
+    sudo "$DAEMON_DIR/daemon" "$POLICY" --pid "$WORKLOAD_PID" \
+        > "$RESULTS_DIR/${POLICY}_summary.csv" \
+        2> "$RESULTS_DIR/${POLICY}_stderr.log" &
     DAEMON_PID=$!
+
+    # Wait for workload to finish
+    wait $WORKLOAD_PID 2>/dev/null || true
+    sleep 2
+    sudo kill $DAEMON_PID 2>/dev/null || true
+    wait $DAEMON_PID 2>/dev/null || true
     
-    # Run workload
-    cd "$WORKLOAD_DIR" && ./workload
-    cd - > /dev/null
-    
-    # Wait for daemon to finish
-    wait $DAEMON_PID
-    echo "Saved to $RESULTS_DIR/results_${POLICY}.csv"
+    echo 1 | sudo tee /proc/sys/kernel/numa_balancing > /dev/null
+    echo always | sudo tee /sys/kernel/mm/transparent_hugepage/enabled > /dev/null
+    echo "Baseline $POLICY complete."
 }
 
 run_autonuma_baseline() {
@@ -54,35 +66,35 @@ run_autonuma_baseline() {
     echo "=================================================="
     cleanup
     
-    # Enable AutoNUMA
     echo 1 | sudo tee /proc/sys/kernel/numa_balancing > /dev/null
+    echo always | sudo tee /sys/kernel/mm/transparent_hugepage/enabled > /dev/null
     
     cat /proc/vmstat | grep numa > "$RESULTS_DIR/autonuma_before.txt"
     numastat > "$RESULTS_DIR/autonuma_numastat_before.txt"
     
-    # Run workload WITHOUT daemon
-    cd "$WORKLOAD_DIR" && ./workload > "$RESULTS_DIR/autonuma_workload_stdout.log"
-    cd - > /dev/null
+    # Run workload locally WITHOUT daemon
+    numactl --membind=1 --cpubind=0 "$WORKLOAD_DIR/workload" \
+        > "$RESULTS_DIR/autonuma_workload_stdout.log"
     
-    # Crucial Fix: Wait for asynchronous kernel threads (numad) to finish migrating queued pages
     echo "[*] Workload finished. Waiting for kernel AutoNUMA threads to flush..."
     sleep 2
     
     cat /proc/vmstat | grep numa > "$RESULTS_DIR/autonuma_after.txt"
     numastat > "$RESULTS_DIR/autonuma_numastat_after.txt"
     
-    # Disable AutoNUMA again
     echo 0 | sudo tee /proc/sys/kernel/numa_balancing > /dev/null
-    
+    echo never | sudo tee /sys/kernel/mm/transparent_hugepage/enabled > /dev/null
     echo "Saved AutoNUMA stats to $RESULTS_DIR/autonuma_after.txt"
 }
 
-# Compiling
+# ---- Build Phase ----
 echo "[*] Compiling workload and daemon..."
 make -C "$WORKLOAD_DIR" clean && make -C "$WORKLOAD_DIR"
-make -C "$DAEMON_DIR" clean && make -C "$DAEMON_DIR"
+make -C "$DAEMON_DIR" clean && make -C "$DAEMON_DIR" LOCAL_DEV=1
 
-# Execute
+sudo mkdir -p /root/results
+
+# ---- Execute Baselines ----
 run_daemon_baseline "lru"
 run_daemon_baseline "lfu"
 run_daemon_baseline "decaying_lfu"
