@@ -48,13 +48,7 @@ int main() {
     mt19937 gen(42);
     shuffle(chase_indices.begin(), chase_indices.end(), gen);
 
-    // Bind ALL pages to Node 1 (Slow Tier) initially
-    unsigned long nodemask = (1UL << 1); // Node 1
-    if (mbind(base_addr, total_size, MPOL_BIND, &nodemask, sizeof(nodemask)*8, MPOL_MF_MOVE) != 0) {
-        perror("mbind failed (make sure you have NUMA node 1)");
-    } else {
-        cout << "[Workload] All " << TOTAL_PAGES << " pages bound to Node 1 (Slow Tier)." << endl;
-    }
+
 
     // Force physical allocation by touching every page
     char* memory = static_cast<char*>(base_addr);
@@ -125,11 +119,10 @@ int main() {
         return (int)(touches % TOTAL_PAGES);
     });
 
-    // Phase 2: Zipf over 384 pages — throttled to create real frequency differentiation
-    run_phase(2, "Zipf Loop (384-page working set, throttled)", [&](long touches, mt19937& g) {
+    // Phase 2: Zipf Loop (384-page working set)
+    run_phase(2, "Zipf Loop (384-page working set)", [&](long touches, mt19937& g) {
         (void)touches;
-        usleep(150); // throttle: ~6,600 accesses/second = ~660 touches/100ms epoch
-        return sample_zipf(g); // returns 0-383 following Zipf(s=1.2)
+        return sample_zipf(g);
     });
 
     // Phase 3: Burst (spike 8 hotspot pages amid random, R/W)
@@ -152,13 +145,9 @@ int main() {
         return unif(g);
     });
 
-    // Phase 6: New Data (shift working set to last 384 pages, completely cold since Phase 1)
-    // By remaining in the tracked base_addr region, the daemon can detect the shift
-    // and must migrate out the stale working set to promote the new one.
-    run_phase(6, "New Data Zipf (last 384 pages, throttled)", [&](long touches, mt19937& g) {
+    // Phase 6: New Data Zipf Loop (last 384 pages)
+    run_phase(6, "New Data Zipf (last 384 pages)", [&](long touches, mt19937& g) {
         (void)touches;
-        usleep(150);
-        // Apply Zipf within the 384-page window
         return (TOTAL_PAGES - NEW_DATA_PAGES) + sample_zipf(g);
     });
 

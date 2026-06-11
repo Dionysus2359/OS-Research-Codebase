@@ -2,6 +2,7 @@
 #define POLICY_H
 
 #include "tier_manager.h"
+#include "cusum.h"
 #include <string>
 
 class Policy {
@@ -30,6 +31,7 @@ public:
     void execute(TierManager& mgr) override;
 private:
     double score_page(const PageMetadata& meta) const;
+    CUSUMDetector cusum;
 };
 
 Policy* get_policy(const std::string& name);

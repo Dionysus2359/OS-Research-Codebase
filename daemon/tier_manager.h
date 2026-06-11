@@ -10,53 +10,54 @@
 constexpr int MIGRATION_BATCH_SIZE = 32;
 
 struct PageMetadata {
-    void* addr;
-    int current_node;        // 0 = Fast, 1 = Slow
+    uintptr_t page_va;           // Page-aligned virtual address in workload
+    int current_node;            // 0 = Fast, 1 = Slow
     long last_access_time;
     int access_count;
     double smooth_frequency;
     int migration_history;
     bool accessed_this_epoch;
     
-    // --- NEW for ML ---
-    double prev_smooth_frequency;  // Previous epoch's smooth_frequency
-    double momentum;               // smooth_frequency delta between epochs
-    int epochs_since_access;       // Consecutive epochs without access
-    int consecutive_hot_epochs;    // Consecutive epochs accessed
-    double hot_ratio;              // page smooth_freq / epoch mean smooth_freq
-    double access_frequency_ratio; // page smooth_freq / max(smooth_freq of all pages)
+    // --- ML features ---
+    double prev_smooth_frequency;
+    double momentum;
+    int epochs_since_access;
+    int consecutive_hot_epochs;
+    double hot_ratio;
+    double access_frequency_ratio;
+    double avg_latency_cycles;     // AOL proxy: avg PEBS weight for this page
+    double aci;                    // Access Criticality Index
 };
 
 class TierManager {
 public:
-    TierManager(int pid, void* base_addr, int total_pages);
+    TierManager(int target_pid);
     
-    void detect_accesses();
+    void detect_accesses(class PerfSampler& sampler);
     void update_page_nodes();
-    void migrate_pages(const std::vector<void*>& pages, int target_node);
-    void clear_soft_dirty_bits();
+    void migrate_pages(const std::vector<uintptr_t>& pages, int target_node);
     
-    std::map<void*, PageMetadata>& get_metadata() { return pages_meta; }
+    std::map<uintptr_t, PageMetadata>& get_metadata() { return pages_meta; }
+    int get_node(uintptr_t page_va) const;
     int get_fast_tier_count() const { return fast_tier_count; }
+    int get_tracked_page_count() const { return (int)pages_meta.size(); }
     
-    // Per-epoch metrics (reset each detect_accesses() call)
+    // Per-epoch metrics
     long total_migrations = 0;
     double total_migration_latency_ms = 0;
-    int epoch_accesses = 0;     // Pages with soft-dirty bit set this epoch
-    int epoch_hits = 0;         // Of those, how many were on Node 0
+    int epoch_accesses = 0;
+    int epoch_hits = 0;
 
     // Per-epoch migration counters (reset by daemon each epoch)
     int epoch_promotions = 0;
     int epoch_demotions = 0;
+    double epoch_density = 1.0;
 
 private:
     int target_pid;
-    void* start_addr;
-    int num_pages;
     int fast_tier_count;
     
-    std::map<void*, PageMetadata> pages_meta;
-    void read_pagemap_and_update(long current_time);
+    std::map<uintptr_t, PageMetadata> pages_meta;
 };
 
 #endif

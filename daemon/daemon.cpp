@@ -5,11 +5,13 @@
 #include <fstream>
 #include <string>
 #include <unistd.h>
-#include <csignal>
+#include <chrono>
+#include "perf_sampler.h"
 #include <sys/types.h>
 #include <signal.h>
 
 using namespace std;
+using namespace std::chrono;
 
 bool keep_running = true;
 
@@ -18,6 +20,12 @@ void signal_handler(int signum) {
     keep_running = false;
 }
 
+void print_usage() {
+    cerr << "Usage: sudo ./daemon <policy_name> --pid <workload_pid> [--trace]" << endl;
+    cerr << "Available policies: lru, lfu, decaying_lfu, ml" << endl;
+}
+
+// Reads /tmp/workload_info — written by the local workload process.
 bool read_workload_info(WorkloadInfo& info) {
     try {
         ifstream infile(WORKLOAD_INFO_PATH);
@@ -31,24 +39,26 @@ bool read_workload_info(WorkloadInfo& info) {
         infile >> info.total_pages;
         infile >> info.current_phase;
         
-        return (info.pid > 0 && info.total_pages > 0);
+        return (info.total_pages > 0);
     } catch (...) {
-        // File was partially written during a phase transition — retry next cycle
         return false;
     }
 }
 
-int main(int argc, char** argv) {
-    if (argc < 2) {
-        cerr << "Usage: sudo ./daemon <policy> (lru|lfu|decaying_lfu)\n";
+int main(int argc, char* argv[]) {
+    if (argc < 4 || string(argv[2]) != "--pid") {
+        print_usage();
         return 1;
     }
-    
+
     string policy_name = argv[1];
+    int target_pid = stoi(argv[3]);
+    
     bool trace_mode = false;
-    if (argc >= 3 && string(argv[2]) == "--trace") {
+    if (argc >= 5 && string(argv[4]) == "--trace") {
         trace_mode = true;
     }
+    
     Policy* policy = get_policy(policy_name);
     if (!policy) {
         cerr << "Unknown policy: " << policy_name << "\n";
@@ -56,14 +66,14 @@ int main(int argc, char** argv) {
     }
 
     if (geteuid() != 0) {
-        cerr << "ERROR: Daemon must run as root (sudo) for /proc/pid/pagemap access.\n";
+        cerr << "ERROR: Daemon must run as root (sudo).\n";
         return 1;
     }
 
     signal(SIGINT, signal_handler);
     signal(SIGTERM, signal_handler);
 
-    // === Wait for workload to start ===
+    // Wait for workload_info (synced from guest by IPC sync script)
     cerr << "[Daemon] Waiting for workload..." << endl;
     WorkloadInfo info;
     while (keep_running) {
@@ -72,46 +82,58 @@ int main(int argc, char** argv) {
     }
     if (!keep_running) return 0;
 
-    cerr << "[Daemon] Attached to PID " << info.pid 
-         << " | Policy: " << policy_name 
-         << " | Pages: " << info.total_pages << endl;
+    cerr << "[Daemon] Workload detected (guest phase=" << info.current_phase << ")" << endl;
 
-    // Disable AutoNUMA so only OUR policy controls migrations
-    system("echo 0 > /proc/sys/kernel/numa_balancing 2>/dev/null");
+    TierManager mgr(target_pid);
+    PerfSampler sampler(target_pid);
     
-    TierManager mgr(info.pid, info.base_address, info.total_pages);
-    mgr.clear_soft_dirty_bits(); // Initialize — clear stale bits
+    if (!sampler.discover_workload_regions()) {
+        cerr << "[Daemon] Failed to discover workload memory regions." << endl;
+        return 1;
+    }
+    if (!sampler.start_recording()) {
+        cerr << "[Daemon] Failed to start perf recording." << endl;
+        return 1;
+    }
+
+    system("echo 0 > /proc/sys/kernel/numa_balancing 2>/dev/null");
 
     int epoch = 0;
     int last_phase = -1;
     
-    // Print CSV header to stdout (daemon results are stdout, diagnostics are stderr)
     cout << "epoch,phase,epoch_accesses,epoch_hits,page_hit_rate,fast_tier_pages,"
-         << "total_migrations,epoch_promotions,epoch_demotions,"
+         << "tracked_pages,total_migrations,epoch_promotions,epoch_demotions,"
          << "migration_cost_ms,estimated_latency_ns" << endl;
 
+    // Trace file (for ML training data collection)
     ofstream trace_file;
     if (trace_mode) {
+        system("mkdir -p /root/results 2>/dev/null");
         string trace_path = "/root/results/trace_" + policy_name + ".csv";
         trace_file.open(trace_path);
         if (trace_file.is_open()) {
-            trace_file << "epoch,phase,page_idx,current_node,accessed,access_count,smooth_frequency,momentum,migration_history,epochs_since_access,hot_ratio,access_frequency_ratio\n";
+            trace_file << "epoch,phase,page_va,current_node,accessed,"
+                       << "smooth_frequency,momentum,migration_history,"
+                       << "epochs_since_access,hot_ratio,access_frequency_ratio,"
+                       << "epoch_density,aci,parse_time_ms\n";
             cerr << "[Daemon] Trace mode ON. Outputting to " << trace_path << endl;
         } else {
-            cerr << "[Daemon] WARNING: Cannot open trace file " << trace_path << ". Trace disabled." << endl;
+            cerr << "[Daemon] WARNING: Cannot open trace file " << trace_path 
+                 << ". Trace disabled." << endl;
             trace_mode = false;
         }
     }
 
     while (keep_running) {
-        // Check if workload is still alive
+        auto epoch_start = high_resolution_clock::now();
+
         read_workload_info(info);
-        if (info.current_phase < 0 || kill(info.pid, 0) != 0) {
-            cerr << "[Daemon] Workload finished. Exiting." << endl;
+        // Only check phase for exit — guest PID doesn't exist on host
+        if (info.current_phase < 0) {
+            cerr << "[Daemon] Workload finished (phase=-1). Exiting." << endl;
             break;
         }
 
-        // Detect phase transitions
         if (info.current_phase != last_phase) {
             if (last_phase != -1) {
                 cerr << "[Daemon] === Phase transition: " << last_phase 
@@ -120,82 +142,85 @@ int main(int argc, char** argv) {
             last_phase = info.current_phase;
         }
 
-        // Reset per-epoch counters
         mgr.epoch_promotions = 0;
         mgr.epoch_demotions = 0;
 
-        // === Core daemon cycle ===
-        // 1. Sample: read soft-dirty bits to detect which pages were accessed
-        mgr.detect_accesses();
-        
-        // 2. Query: get actual NUMA node for each page (PRE-migration snapshot)
+        sampler.sample_epoch();
+        mgr.detect_accesses(sampler);
         mgr.update_page_nodes();
         
-        // Skip logging and policy if no accesses detected
         if (mgr.epoch_accesses == 0) {
-            usleep(100000);
             epoch++;
+            auto epoch_end = high_resolution_clock::now();
+            double epoch_ms = duration<double, std::milli>(epoch_end - epoch_start).count();
+            if (epoch_ms < 100.0) usleep((int)((100.0 - epoch_ms) * 1000));
             continue;
         }
 
+        // Write per-page trace data for ML training
         if (trace_mode && trace_file.is_open()) {
-            int page_idx = 0;
-            for (auto& pair : mgr.get_metadata()) {
-                auto& pm = pair.second;
+            auto& meta_map = mgr.get_metadata();
+            for (auto& [addr, pm] : meta_map) {
                 trace_file << epoch << ","
                            << info.current_phase << ","
-                           << page_idx++ << ","
+                           << "0x" << std::hex << pm.page_va << std::dec << ","
                            << pm.current_node << ","
                            << pm.accessed_this_epoch << ","
-                           << pm.access_count << ","
                            << pm.smooth_frequency << ","
                            << pm.momentum << ","
                            << pm.migration_history << ","
                            << pm.epochs_since_access << ","
                            << pm.hot_ratio << ","
-                           << pm.access_frequency_ratio << "\n";
+                           << pm.access_frequency_ratio << ","
+                           << mgr.epoch_density << ","
+                           << pm.aci << ","
+                           << sampler.get_last_parse_duration_ms() << "\n";
             }
+            trace_file.flush();
         }
 
-        // 3. Compute PRE-migration metrics
         double page_hit_rate = (double)mgr.epoch_hits / mgr.epoch_accesses;
         long est_latency_ns = (long)mgr.epoch_hits * FAST_LATENCY_NS 
                             + (long)(mgr.epoch_accesses - mgr.epoch_hits) * SLOW_LATENCY_NS;
         
-        // 4. Decide + Migrate: run the active policy
         policy->execute(mgr);
-        
-        // 5. Re-query node placement after migrations (for next epoch's state tracking)
         mgr.update_page_nodes();
         
-        // 6. Output CSV row (stdout)
         cout << epoch << "," 
              << info.current_phase << ","
              << mgr.epoch_accesses << ","
              << mgr.epoch_hits << ","
              << page_hit_rate << ","
              << mgr.get_fast_tier_count() << ","
+             << mgr.get_tracked_page_count() << ","
              << mgr.total_migrations << ","
              << mgr.epoch_promotions << ","
              << mgr.epoch_demotions << ","
              << mgr.total_migration_latency_ms << ","
              << est_latency_ns << endl;
         
-        // Human-readable summary to stderr
         cerr << "E" << epoch 
              << " P" << info.current_phase
              << " | Hit: " << (int)(page_hit_rate * 100) << "%"
              << " | Fast: " << mgr.get_fast_tier_count() << "/" << FAST_TIER_CAPACITY
+             << " | Tracked: " << mgr.get_tracked_page_count()
              << " | Mig: +" << mgr.epoch_promotions << "/-" << mgr.epoch_demotions
              << " (total=" << mgr.total_migrations << ")"
              << " | Est.Lat: " << est_latency_ns << "ns"
              << " | Cost: " << mgr.total_migration_latency_ms << "ms" << endl;
 
         epoch++;
-        usleep(100000); // 100ms cycle
+        
+        auto epoch_end = high_resolution_clock::now();
+        double epoch_ms = duration<double, std::milli>(epoch_end - epoch_start).count();
+        if (epoch_ms < 100.0) {
+            usleep((int)((100.0 - epoch_ms) * 1000));
+        } else {
+            cerr << "[Daemon] WARNING: Epoch " << epoch 
+                 << " took " << epoch_ms << "ms (over budget)" << endl;
+        }
     }
 
-    // Re-enable AutoNUMA on exit
     system("echo 1 > /proc/sys/kernel/numa_balancing 2>/dev/null");
     
     delete policy;

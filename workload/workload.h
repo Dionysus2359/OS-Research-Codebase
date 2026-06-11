@@ -6,7 +6,7 @@
 // Configuration per implementation plan
 constexpr int PAGE_SIZE = 4096;
 constexpr int TOTAL_PAGES = 2048;           // 8MB base memory
-constexpr int FAST_TIER_CAPACITY = 128;     // 25% of total pages (Node 0 limit)
+constexpr int FAST_TIER_CAPACITY = 128;      // Reduced to induce thrashing and CUSUM detection
 constexpr int NEW_DATA_PAGES = 384;         // Extra for phase 6
 constexpr int HOTSPOT_PAGES = 384;          // Used in Loop phase
 

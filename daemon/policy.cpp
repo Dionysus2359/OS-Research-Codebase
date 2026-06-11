@@ -1,7 +1,6 @@
 #include "policy.h"
 #include <vector>
 #include <algorithm>
-#include <iostream>
 #include <cmath>
 #include "ml_weights.h"
 
@@ -35,8 +34,8 @@ void promote_and_demote(TierManager& mgr, Compare comp) {
         return comp(b, a); 
     });
     
-    vector<void*> to_promote;
-    vector<void*> to_demote;
+    vector<uintptr_t> to_promote;
+    vector<uintptr_t> to_demote;
     
     int free_fast_slots = FAST_TIER_CAPACITY - mgr.get_fast_tier_count();
     
@@ -46,7 +45,7 @@ void promote_and_demote(TierManager& mgr, Compare comp) {
         
         if (free_fast_slots > 0) {
             // Fast tier has room — promote directly
-            to_promote.push_back(candidate->addr);
+            to_promote.push_back(candidate->page_va);
             free_fast_slots--;
         } else {
             // Fast tier is FULL — only swap if candidate is hotter than coldest fast page
@@ -55,8 +54,8 @@ void promote_and_demote(TierManager& mgr, Compare comp) {
                 
                 if (comp(candidate, victim)) {
                     // Candidate IS hotter than the coldest fast page — swap them
-                    to_demote.push_back(victim->addr);
-                    to_promote.push_back(candidate->addr);
+                    to_demote.push_back(victim->page_va);
+                    to_promote.push_back(candidate->page_va);
                     demote_idx++;
                 } else {
                     // Candidate is NOT hotter — since list is sorted, no remaining 
@@ -111,12 +110,12 @@ double MLPolicy::score_page(const PageMetadata& meta) const {
     // and the comment in ml_weights.h
     double features[] = {
         meta.smooth_frequency,            // index 0
-        (double)meta.access_count,        // index 1
-        meta.momentum,                    // index 2
-        (double)meta.migration_history,   // index 3
-        (double)meta.epochs_since_access, // index 4
-        meta.hot_ratio,                   // index 5
-        meta.access_frequency_ratio       // index 6
+        meta.momentum,                    // index 1
+        (double)meta.migration_history,   // index 2
+        (double)meta.epochs_since_access, // index 3
+        meta.hot_ratio,                   // index 4
+        meta.access_frequency_ratio,      // index 5
+        meta.aci                          // index 6
     };
     
     double dot = ML_BIAS;
@@ -135,7 +134,7 @@ double MLPolicy::score_page(const PageMetadata& meta) const {
 void MLPolicy::execute(TierManager& mgr) {
     auto& meta = mgr.get_metadata();
     
-    struct ScoredPage { void* addr; double score; };
+    struct ScoredPage { uintptr_t page_va; double score; };
     vector<ScoredPage> slow_candidates;
     vector<ScoredPage> fast_pages;
     
@@ -143,9 +142,9 @@ void MLPolicy::execute(TierManager& mgr) {
         auto& pm = pair.second;
         double s = score_page(pm);
         if (pm.current_node == 1 && pm.accessed_this_epoch) {
-            slow_candidates.push_back({pm.addr, s});
+            slow_candidates.push_back({pm.page_va, s});
         } else if (pm.current_node == 0) {
-            fast_pages.push_back({pm.addr, s});
+            fast_pages.push_back({pm.page_va, s});
         }
     }
     
@@ -157,8 +156,8 @@ void MLPolicy::execute(TierManager& mgr) {
     sort(fast_pages.begin(), fast_pages.end(),
          [](const ScoredPage& a, const ScoredPage& b) { return a.score < b.score; });
     
-    vector<void*> to_promote;
-    vector<void*> to_demote;
+    vector<uintptr_t> to_promote;
+    vector<uintptr_t> to_demote;
     
     int free_fast_slots = FAST_TIER_CAPACITY - mgr.get_fast_tier_count();
     size_t demote_idx = 0;
@@ -166,21 +165,24 @@ void MLPolicy::execute(TierManager& mgr) {
     // Score margin: only swap if the candidate is meaningfully hotter
     // than the victim. Prevents churn when all pages have similar scores
     // (analogous to DLFU's 0.001 smooth_frequency tolerance band).
-    const double PROMOTE_MARGIN = 0.01;   // for eviction swaps
-    const double DEMOTE_MARGIN  = 0.05;   // victim must be clearly worse
+    const double PROMOTE_MARGIN = cusum.get_promote_margin();
+    const double DEMOTE_MARGIN  = cusum.get_demote_margin();
+    const double ABS_THRESHOLD  = cusum.get_absolute_threshold();
 
     for (size_t i = 0; i < slow_candidates.size()
          && (int)to_promote.size() < MIGRATION_BATCH_SIZE;  // batch cap
          ++i) {
         
+        if (slow_candidates[i].score < ABS_THRESHOLD) continue;
+        
         if (free_fast_slots > 0) {
-            to_promote.push_back(slow_candidates[i].addr);
+            to_promote.push_back(slow_candidates[i].page_va);
             free_fast_slots--;
         } else if (demote_idx < fast_pages.size()) {
             if (slow_candidates[i].score > fast_pages[demote_idx].score + PROMOTE_MARGIN &&
                 fast_pages[demote_idx].score < slow_candidates[i].score - DEMOTE_MARGIN) {
-                to_demote.push_back(fast_pages[demote_idx].addr);
-                to_promote.push_back(slow_candidates[i].addr);
+                to_demote.push_back(fast_pages[demote_idx].page_va);
+                to_promote.push_back(slow_candidates[i].page_va);
                 demote_idx++;
             } else {
                 break;  // sorted — no remaining candidates beat remaining victims
@@ -192,6 +194,8 @@ void MLPolicy::execute(TierManager& mgr) {
     
     mgr.migrate_pages(to_demote, 1);  // demote first (make room)
     mgr.migrate_pages(to_promote, 0); // then promote
+    
+    cusum.update((double)(to_promote.size() + to_demote.size()));
 }
 
 Policy* get_policy(const string& name) {
