@@ -1,5 +1,9 @@
 #!/bin/bash
 set -e
+cleanup_on_exit() {
+    echo 25 | sudo tee /proc/sys/kernel/perf_cpu_time_max_percent > /dev/null 2>&1
+}
+trap cleanup_on_exit INT TERM EXIT
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 cd "$SCRIPT_DIR"
 
@@ -7,8 +11,9 @@ echo "=========================================="
 echo "Phase 3: ML Offline Training (Decaying LFU)"
 echo "=========================================="
 
-# Force the kernel ceiling up before the run to prevent PMU auto-throttling
-sudo sysctl -w kernel.perf_event_max_sample_rate=50000 > /dev/null 2>&1
+# Force the kernel ceiling up and disable PMU auto-throttling
+sudo sysctl -w kernel.perf_event_max_sample_rate=50000 > /dev/null 2>&1 || true
+echo 0 | sudo tee /proc/sys/kernel/perf_cpu_time_max_percent > /dev/null || true
 
 echo "[*] Compiling workload and daemon..."
 make -C ../workload clean && make -C ../workload

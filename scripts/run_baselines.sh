@@ -4,7 +4,11 @@
 # Usage: ./run_baselines.sh
 
 set -e
-trap 'kill $(jobs -p) 2>/dev/null; exit' INT TERM EXIT
+cleanup_on_exit() {
+    kill $(jobs -p) 2>/dev/null || true
+    echo 25 | sudo tee /proc/sys/kernel/perf_cpu_time_max_percent > /dev/null 2>&1
+}
+trap cleanup_on_exit INT TERM EXIT
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 PROJECT_ROOT="$(cd "$SCRIPT_DIR/.." && pwd)"
@@ -15,8 +19,9 @@ RESULTS_DIR="${PROJECT_ROOT}/results"
 
 mkdir -p "$RESULTS_DIR"
 
-# Force the kernel ceiling up before the run to prevent PMU auto-throttling
-sudo sysctl -w kernel.perf_event_max_sample_rate=50000 > /dev/null 2>&1
+# Force the kernel ceiling up and disable PMU auto-throttling
+sudo sysctl -w kernel.perf_event_max_sample_rate=50000 > /dev/null 2>&1 || true
+echo 0 | sudo tee /proc/sys/kernel/perf_cpu_time_max_percent > /dev/null || true
 
 cleanup() {
     echo "[*] Cleaning up system state..."
@@ -33,8 +38,9 @@ run_daemon_baseline() {
     echo "=========================================="
     cleanup
 
-    echo 0 | sudo tee /proc/sys/kernel/numa_balancing > /dev/null
-    echo never | sudo tee /sys/kernel/mm/transparent_hugepage/enabled > /dev/null
+    echo 0 | sudo tee /proc/sys/kernel/numa_balancing > /dev/null || true
+    echo never | sudo tee /sys/kernel/mm/transparent_hugepage/enabled > /dev/null || true
+    sudo sysctl -w kernel.perf_event_max_sample_rate=50000 > /dev/null 2>&1 || true
 
     # Start workload in background (bound to Node 1 memory, Node 0 CPU)
     numactl --membind=1 --cpubind=0 "$WORKLOAD_DIR/workload" &
