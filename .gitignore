@@ -1,8 +1,33 @@
-old results/
-walkthrough, explanations etc/
-ml/trace_decaying_lfu.csv
 qemu/
 results/
 daemon/bpf/vmlinux.h
-daemon/bpf/*.skel.h
-daemon/bpf/*.bpf.o
+
+# Compiled binaries and object files
+*.o
+daemon/daemon
+workload/workload
+workload/stream
+workload/gapbs/bc
+workload/gapbs/bfs
+workload/gapbs/cc
+workload/gapbs/cc_sv
+workload/gapbs/converter
+workload/gapbs/pr
+workload/gapbs/pr_spmv
+workload/gapbs/sssp
+workload/gapbs/tc
+# Traces and CSVs
+ml/*.csv
+ml/traces/
+
+# Simulators
+coeus-sim/
+
+# Python & OS
+__pycache__/
+*.py[cod]
+.DS_Store
+
+# Auto-generated documents
+*.docx
+generate_report.py

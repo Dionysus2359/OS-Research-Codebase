@@ -3,6 +3,7 @@
 #include <algorithm>
 #include <cmath>
 #include "ml_weights.h"
+#include <random>
 
 using namespace std;
 
@@ -40,7 +41,7 @@ void promote_and_demote(TierManager& mgr, Compare comp) {
     int free_fast_slots = FAST_TIER_CAPACITY - mgr.get_fast_tier_count();
     
     size_t demote_idx = 0;
-    for (size_t i = 0; i < slow_hot_pages.size() && (int)to_promote.size() < MIGRATION_BATCH_SIZE; ++i) {
+    for (size_t i = 0; i < slow_hot_pages.size() && (int)to_promote.size() < MAX_PROMOTIONS_PER_EPOCH; ++i) {
         PageMetadata* candidate = slow_hot_pages[i];
         
         if (free_fast_slots > 0) {
@@ -69,7 +70,7 @@ void promote_and_demote(TierManager& mgr, Compare comp) {
     }
     
     // Execute: demote first (make room), then promote
-    mgr.migrate_pages(to_demote, 1);
+    mgr.migrate_pages(to_demote, SLOW_NODE);
     mgr.migrate_pages(to_promote, 0);
 }
 
@@ -109,13 +110,12 @@ double MLPolicy::score_page(const PageMetadata& meta) const {
     // Feature order MUST match FEATURE_COLS in label_and_train.py
     // and the comment in ml_weights.h
     double features[] = {
-        meta.smooth_frequency,            // index 0
-        meta.momentum,                    // index 1
-        (double)meta.migration_history,   // index 2
-        (double)meta.epochs_since_access, // index 3
-        meta.hot_ratio,                   // index 4
-        meta.access_frequency_ratio,      // index 5
-        meta.aci                          // index 6
+        log1p((double)meta.access_count), // index 0
+        meta.smooth_frequency,            // index 1
+        meta.momentum,                    // index 2
+        meta.hot_ratio,                   // index 3
+        meta.access_frequency_ratio,      // index 4
+        meta.aci                          // index 5
     };
     
     double dot = ML_BIAS;
@@ -128,7 +128,15 @@ double MLPolicy::score_page(const PageMetadata& meta) const {
         dot += ML_WEIGHTS[i] * normalized;
     }
     
-    return 1.0 / (1.0 + exp(-dot));  // sigmoid → probability in [0, 1]
+    double probability = 0.0;
+    if (dot > 20.0) {
+        probability = 1.0;
+    } else if (dot < -20.0) {
+        probability = 0.0;
+    } else {
+        probability = 1.0 / (1.0 + exp(-dot));
+    }
+    return probability;
 }
 
 void MLPolicy::execute(TierManager& mgr) {
@@ -140,8 +148,15 @@ void MLPolicy::execute(TierManager& mgr) {
     
     for (auto& pair : meta) {
         auto& pm = pair.second;
+        
+        // If a page is in the slow tier and wasn't touched this epoch, 
+        // don't even waste CPU cycles calculating its ML score or sorting it.
+        if (pm.current_node == SLOW_NODE && !pm.accessed_this_epoch) {
+            continue; 
+        }
+        
         double s = score_page(pm);
-        if (pm.current_node == 1 && pm.accessed_this_epoch) {
+        if (pm.current_node == SLOW_NODE && pm.accessed_this_epoch) {
             slow_candidates.push_back({pm.page_va, s});
         } else if (pm.current_node == 0) {
             fast_pages.push_back({pm.page_va, s});
@@ -170,7 +185,7 @@ void MLPolicy::execute(TierManager& mgr) {
     const double ABS_THRESHOLD  = cusum.get_absolute_threshold();
 
     for (size_t i = 0; i < slow_candidates.size()
-         && (int)to_promote.size() < MIGRATION_BATCH_SIZE;  // batch cap
+         && (int)to_promote.size() < MAX_PROMOTIONS_PER_EPOCH;  // batch cap
          ++i) {
         
         if (slow_candidates[i].score < ABS_THRESHOLD) continue;
@@ -192,7 +207,7 @@ void MLPolicy::execute(TierManager& mgr) {
         }
     }
     
-    mgr.migrate_pages(to_demote, 1);  // demote first (make room)
+    mgr.migrate_pages(to_demote, SLOW_NODE);  // demote first (make room)
     mgr.migrate_pages(to_promote, 0); // then promote
     
     cusum.update((double)(to_promote.size() + to_demote.size()));
@@ -203,5 +218,48 @@ Policy* get_policy(const string& name) {
     if (name == "lfu") return new LFUPolicy();
     if (name == "decaying_lfu") return new DecayingLFUPolicy();
     if (name == "ml") return new MLPolicy();
+    if (name == "random") return new RandomPolicy();
     return nullptr;
+}
+
+void RandomPolicy::execute(TierManager& mgr) {
+    auto meta = mgr.get_metadata();
+    vector<PageMetadata*> slow_cands;
+    for (auto& pair : meta) {
+        if (pair.second.current_node == SLOW_NODE) {
+            slow_cands.push_back(&pair.second);
+        }
+    }
+    
+    std::random_device rd;
+    std::mt19937 g(rd());
+    std::shuffle(slow_cands.begin(), slow_cands.end(), g);
+
+    vector<uintptr_t> to_promote;
+    vector<uintptr_t> to_demote;
+    
+    // Pick random pages to promote
+    int free_fast_slots = FAST_TIER_CAPACITY - mgr.get_fast_tier_count();
+    int promoted = 0;
+    for (auto& cand : slow_cands) {
+        if (promoted >= MAX_PROMOTIONS_PER_EPOCH) break;
+        if (free_fast_slots > 0) {
+            to_promote.push_back(cand->page_va);
+            free_fast_slots--;
+            promoted++;
+        } else {
+            // Need to evict a random fast page
+            // We just grab the first one in the metadata map for simplicity (maps are semi-random based on hash)
+            for (auto& p : meta) {
+                if (p.second.current_node == 0 && std::find(to_demote.begin(), to_demote.end(), p.first) == to_demote.end()) {
+                    to_demote.push_back(p.first);
+                    to_promote.push_back(cand->page_va);
+                    promoted++;
+                    break;
+                }
+            }
+        }
+    }
+    mgr.migrate_pages(to_demote, SLOW_NODE);
+    mgr.migrate_pages(to_promote, 0);
 }

@@ -17,16 +17,21 @@ class CUSUMDetector {
   static constexpr int TRANSITION_EPOCHS = 20;
 
   // Margin bounds
-  static constexpr double REACT_PROMOTE = 0.001;
-  static constexpr double REACT_DEMOTE = 0.01;
-  static constexpr double STABLE_PROMOTE = 0.05;
-  static constexpr double STABLE_DEMOTE = 0.10;
+  static constexpr double REACT_PROMOTE = 0.05;
+  double react_demote = 0.10;
+  double stable_promote = 0.20;
+  double stable_demote = 0.40;
 
-  static constexpr double REACT_ABS_THRESHOLD = 0.40;
-  static constexpr double STABLE_ABS_THRESHOLD = 0.60;
+  static constexpr double REACT_ABS_THRESHOLD = 0.10;
+  double stable_abs_threshold = 0.30;
 
 public:
   CUSUMDetector() = default;
+
+  void set_margins(double abs_thresh, double demote_margin) {
+      stable_abs_threshold = abs_thresh;
+      stable_demote = demote_margin;
+  }
 
   bool update(double observation); // Returns true if change-point detected
 

@@ -7,7 +7,11 @@
 #include <string>
 
 #include "../workload/workload.h"
-constexpr int MIGRATION_BATCH_SIZE = 32;
+
+extern int MAX_PROMOTIONS_PER_EPOCH;
+extern int MAX_DEMOTIONS_PER_EPOCH;
+
+extern int SLOW_NODE;
 
 struct PageMetadata {
     uintptr_t page_va;           // Page-aligned virtual address in workload

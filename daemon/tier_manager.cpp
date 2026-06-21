@@ -40,7 +40,7 @@ void TierManager::detect_accesses(EbpfSampler& sampler) {
             // First time seeing this page — create metadata
             PageMetadata new_meta = {};
             new_meta.page_va = page_va;
-            new_meta.current_node = 1;  // assume slow tier initially
+            new_meta.current_node = SLOW_NODE;  // assume slow tier initially
             pages_meta[page_va] = new_meta;
             it = pages_meta.find(page_va);
         }

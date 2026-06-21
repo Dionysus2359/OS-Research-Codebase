@@ -22,7 +22,7 @@ void signal_handler(int signum) {
 }
 
 void print_usage() {
-    cerr << "Usage: sudo ./daemon <policy_name> --pid <workload_pid> [--trace]" << endl;
+    cerr << "Usage: sudo ./daemon <policy_name> --pid <workload_pid> [--abs-thresh X] [--demote-margin X] [--trace]" << endl;
     cerr << "Available policies: lru, lfu, decaying_lfu, ml" << endl;
 }
 
@@ -46,6 +46,11 @@ bool read_workload_info(WorkloadInfo& info) {
     }
 }
 
+int SLOW_NODE = 1;
+int FAST_TIER_CAPACITY = 128;
+int MAX_PROMOTIONS_PER_EPOCH = 32;
+int MAX_DEMOTIONS_PER_EPOCH = 32;
+
 int main(int argc, char* argv[]) {
     if (argc < 4 || string(argv[2]) != "--pid") {
         print_usage();
@@ -56,14 +61,40 @@ int main(int argc, char* argv[]) {
     int target_pid = stoi(argv[3]);
     
     bool trace_mode = false;
-    if (argc >= 5 && string(argv[4]) == "--trace") {
-        trace_mode = true;
+    string trace_dir_opt = "/tmp";
+    double abs_thresh_val = -1.0;
+    double demote_margin_val = -1.0;
+
+    for (int i = 4; i < argc; ++i) {
+        if (string(argv[i]) == "--trace") {
+            trace_mode = true;
+        } else if (string(argv[i]) == "--trace-dir" && i + 1 < argc) {
+            trace_dir_opt = argv[++i];
+        } else if (string(argv[i]) == "--slow-node" && i + 1 < argc) {
+            SLOW_NODE = stoi(argv[++i]);
+        } else if (string(argv[i]) == "--fast-tier-capacity" && i + 1 < argc) {
+            FAST_TIER_CAPACITY = stoi(argv[++i]);
+        } else if (string(argv[i]) == "--max-promotions" && i + 1 < argc) {
+            MAX_PROMOTIONS_PER_EPOCH = stoi(argv[++i]);
+        } else if (string(argv[i]) == "--max-demotions" && i + 1 < argc) {
+            MAX_DEMOTIONS_PER_EPOCH = stoi(argv[++i]);
+        } else if (string(argv[i]) == "--abs-thresh" && i + 1 < argc) {
+            abs_thresh_val = stod(argv[++i]);
+        } else if (string(argv[i]) == "--demote-margin" && i + 1 < argc) {
+            demote_margin_val = stod(argv[++i]);
+        }
     }
     
     Policy* policy = get_policy(policy_name);
     if (!policy) {
         cerr << "Unknown policy: " << policy_name << "\n";
         return 1;
+    }
+
+    if (abs_thresh_val >= 0 && demote_margin_val >= 0) {
+        policy->set_margins(abs_thresh_val, demote_margin_val);
+        cerr << "[Daemon] CUSUM overrides applied: abs=" << abs_thresh_val 
+             << " demote=" << demote_margin_val << endl;
     }
 
     if (geteuid() != 0) {
@@ -109,11 +140,13 @@ int main(int argc, char* argv[]) {
     // Trace file (for ML training data collection)
     ofstream trace_file;
     if (trace_mode) {
-        system("mkdir -p /root/results 2>/dev/null");
-        string trace_path = "/root/results/trace_" + policy_name + ".csv";
+        string trace_dir = trace_dir_opt;
+        string mkdir_cmd = "mkdir -p " + trace_dir + " 2>/dev/null";
+        system(mkdir_cmd.c_str());
+        string trace_path = trace_dir + "/trace_" + policy_name + ".csv";
         trace_file.open(trace_path);
         if (trace_file.is_open()) {
-            trace_file << "epoch,phase,page_va,current_node,accessed,"
+            trace_file << "epoch,phase,page_va,current_node,accessed,access_count,"
                        << "smooth_frequency,momentum,migration_history,"
                        << "epochs_since_access,hot_ratio,access_frequency_ratio,"
                        << "epoch_density,aci,parse_time_ms\n";
@@ -167,6 +200,7 @@ int main(int argc, char* argv[]) {
                            << "0x" << std::hex << pm.page_va << std::dec << ","
                            << pm.current_node << ","
                            << pm.accessed_this_epoch << ","
+                           << pm.access_count << ","
                            << pm.smooth_frequency << ","
                            << pm.momentum << ","
                            << pm.migration_history << ","
@@ -181,8 +215,13 @@ int main(int argc, char* argv[]) {
         }
 
         double page_hit_rate = (double)mgr.epoch_hits / mgr.epoch_accesses;
+        // Asymmetric CXL model: reads use SLOW_LATENCY_NS, writes use SLOW_WRITE_LATENCY_NS
+        long slow_accesses = mgr.epoch_accesses - mgr.epoch_hits;
+        long slow_reads = (long)(slow_accesses * (1.0 - WRITE_RATIO));
+        long slow_writes = slow_accesses - slow_reads;
         long est_latency_ns = (long)mgr.epoch_hits * FAST_LATENCY_NS 
-                            + (long)(mgr.epoch_accesses - mgr.epoch_hits) * SLOW_LATENCY_NS;
+                            + slow_reads * SLOW_LATENCY_NS
+                            + slow_writes * SLOW_WRITE_LATENCY_NS;
         
         policy->execute(mgr);
         mgr.update_page_nodes();

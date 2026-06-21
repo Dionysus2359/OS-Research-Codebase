@@ -31,7 +31,7 @@ for i in $(seq 1 20); do
     sleep 0.25
 done
 
-sudo ../daemon/daemon decaying_lfu --pid $WL_PID --trace > /dev/null &
+sudo ../daemon/daemon random --pid $WL_PID --trace --trace-dir ../ml > /dev/null &
 DAEMON_PID=$!
 
 wait $WL_PID 2>/dev/null || true
@@ -39,11 +39,10 @@ sleep 2
 sudo kill $DAEMON_PID 2>/dev/null || true
 wait $DAEMON_PID 2>/dev/null || true
 
-echo "[*] Trace collected. Training ML Model..."
-sudo cp /root/results/trace_decaying_lfu.csv ../ml/trace_decaying_lfu.csv
-sudo chown $(whoami):$(whoami) ../ml/trace_decaying_lfu.csv
-cd ../ml
-python label_and_train.py
+echo "[*] Trace collected. Please run label_and_train_v2.py manually."
+# Fix permissions since daemon ran as root
+REAL_USER=${SUDO_USER:-$USER}
+sudo chown $REAL_USER:$REAL_USER ../ml/trace_random.csv 2>/dev/null || true
 
 echo "[*] Recompiling daemon with new weights..."
 cd ../daemon

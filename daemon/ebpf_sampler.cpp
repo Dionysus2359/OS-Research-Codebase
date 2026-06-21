@@ -128,12 +128,15 @@ bool EbpfSampler::start_recording() {
 }
 
 bool EbpfSampler::is_workload_vma(uintptr_t va) const {
-  for (const auto &region : vma_regions) {
-    if (va >= region.va_start && va < region.va_end) {
-      return true;
-    }
-  }
-  return false;
+  if (vma_regions.empty()) return false;
+  // O(log N) binary search on sorted VMA regions.
+  // Find the first region whose va_start > va, then check the previous.
+  auto it = std::upper_bound(
+      vma_regions.begin(), vma_regions.end(), va,
+      [](uintptr_t addr, const VMRegion &r) { return addr < r.va_start; });
+  if (it == vma_regions.begin()) return false;
+  --it;
+  return va < it->va_end;
 }
 
 void EbpfSampler::reset() { page_samples.clear(); }

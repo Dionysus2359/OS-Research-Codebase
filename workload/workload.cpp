@@ -13,6 +13,8 @@
 using namespace std;
 using namespace std::chrono;
 
+int FAST_TIER_CAPACITY = 128;
+
 void update_shared_info(WorkloadInfo& info, int current_phase) {
     info.current_phase = current_phase;
     ofstream outfile(WORKLOAD_INFO_PATH);

@@ -45,20 +45,20 @@ double CUSUMDetector::get_promote_margin() const {
     } else if (epochs_since_detection <= TRANSITION_EPOCHS) {
         double t = (double)(epochs_since_detection - REACT_EPOCHS) 
                  / (TRANSITION_EPOCHS - REACT_EPOCHS);
-        return REACT_PROMOTE + t * (STABLE_PROMOTE - REACT_PROMOTE);
+        return REACT_PROMOTE + t * (stable_promote - REACT_PROMOTE);
     }
-    return STABLE_PROMOTE;
+    return stable_promote;
 }
 
 double CUSUMDetector::get_demote_margin() const {
     if (epochs_since_detection <= REACT_EPOCHS) {
-        return REACT_DEMOTE;
+        return react_demote;
     } else if (epochs_since_detection <= TRANSITION_EPOCHS) {
         double t = (double)(epochs_since_detection - REACT_EPOCHS) 
                  / (TRANSITION_EPOCHS - REACT_EPOCHS);
-        return REACT_DEMOTE + t * (STABLE_DEMOTE - REACT_DEMOTE);
+        return react_demote + t * (stable_demote - react_demote);
     }
-    return STABLE_DEMOTE;
+    return stable_demote;
 }
 
 double CUSUMDetector::get_absolute_threshold() const {
@@ -67,7 +67,7 @@ double CUSUMDetector::get_absolute_threshold() const {
     } else if (epochs_since_detection <= TRANSITION_EPOCHS) {
         double t = (double)(epochs_since_detection - REACT_EPOCHS) 
                  / (TRANSITION_EPOCHS - REACT_EPOCHS);
-        return REACT_ABS_THRESHOLD + t * (STABLE_ABS_THRESHOLD - REACT_ABS_THRESHOLD);
+        return REACT_ABS_THRESHOLD + t * (stable_abs_threshold - REACT_ABS_THRESHOLD);
     }
-    return STABLE_ABS_THRESHOLD;
+    return stable_abs_threshold;
 }
