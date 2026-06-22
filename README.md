@@ -1,4 +1,4 @@
-#ML-Assisted Memory Tiering for CXL Systems
+## ML-Assisted Memory Tiering for CXL Systems
 
 An intelligent, eBPF-driven memory page placement daemon for heterogeneous DRAM/CXL memory systems. Coeus monitors page-level access patterns in real time via hardware performance counters (Intel PEBS) and uses a trained logistic regression model with CUSUM change-point detection to decide which pages belong in fast DRAM and which can safely reside in slower CXL-attached memory.
 
