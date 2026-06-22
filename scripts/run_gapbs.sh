@@ -65,7 +65,12 @@ run_gapbs_kernel() {
     TRIALS=5
     FTC=128
     if [ "$SCALE" -ge 23 ]; then
-        MEMBIND=2
+        if numactl -H | grep -q "node 2"; then
+            MEMBIND=2
+        else
+            echo "[WARN] Scale >= 23 but Node 2 not found! Falling back to Node 1."
+            MEMBIND=1
+        fi
         # TRIALS=64
         # Dynamic Capacity: Give BFS room to breathe, keep PR under the hardware limit
         if [ "$KERNEL" == "pr" ]; then
@@ -161,8 +166,18 @@ run_gapbs_autonuma() {
     MEMBIND=1
     TRIALS=5
     if [ "$SCALE" -ge 23 ]; then
-        MEMBIND=2
-        TRIALS=64
+        if numactl -H | grep -q "node 2"; then
+            MEMBIND=2
+        else
+            echo "[WARN] Scale >= 23 but Node 2 not found! Falling back to Node 1."
+            MEMBIND=1
+        fi
+        # TRIALS=64
+        if [ "$KERNEL" == "pr" ]; then
+            TRIALS=250
+        else
+            TRIALS=1000
+        fi
     elif [ "$SCALE" -le 20 ]; then
         TRIALS=300
     fi

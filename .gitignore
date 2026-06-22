@@ -16,6 +16,7 @@ workload/gapbs/pr
 workload/gapbs/pr_spmv
 workload/gapbs/sssp
 workload/gapbs/tc
+workload/ycsb/
 # Traces and CSVs
 ml/*.csv
 ml/traces/

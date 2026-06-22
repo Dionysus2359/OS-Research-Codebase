@@ -9,7 +9,8 @@ import os
 traces = {
     'synthetic': 'trace_random.csv',
     'bfs':       'traces/trace_random_bfs.csv',
-    'pagerank':  'traces/trace_random_pr.csv'
+    'pagerank':  'traces/trace_random_pr.csv',
+    'redis':     'traces/trace_random_redis.csv'
 }
 
 print("Loading trace data...")
@@ -33,7 +34,7 @@ df_all = pd.concat(dfs, ignore_index=True)
 # PageRank/BFS: all phases (it only has phase 1)
 df_filtered = df_all[
     ((df_all['workload'] == 'synthetic') & (df_all['phase'].isin([2, 6]))) |
-    (df_all['workload'].isin(['pagerank', 'bfs']))
+    (df_all['workload'].isin(['pagerank', 'bfs', 'redis']))
 ].copy()
 
 print("Building indices...")
@@ -148,20 +149,16 @@ def train_and_eval(train_df, test_df, name):
     print(f"[{name}] Balanced Acc: {acc:.3f} | F1: {f1:.3f}")
     return model, scaler
 
-print("\n--- Leave-One-Out Cross-Validation ---")
-if 'synthetic' in df_labeled['workload'].unique() and 'pagerank' in df_labeled['workload'].unique() and 'bfs' in df_labeled['workload'].unique():
-    train_and_eval(
-        df_labeled[df_labeled['workload'].isin(['synthetic', 'bfs'])],
-        df_labeled[df_labeled['workload'] == 'pagerank'],
-        "Train: Synth+BFS -> Test: PageRank"
-    )
-    train_and_eval(
-        df_labeled[df_labeled['workload'].isin(['synthetic', 'pagerank'])],
-        df_labeled[df_labeled['workload'] == 'bfs'],
-        "Train: Synth+PR -> Test: BFS"
-    )
-else:
-    print("Need all three workloads for full LOOCV.")
+workloads = sorted(df_labeled['workload'].unique())
+print("\n--- Leave-One-Workload-Out Cross-Validation ---")
+for held_out in workloads:
+    train_wls = [w for w in workloads if w != held_out]
+    if len(train_wls) > 0:
+        train_and_eval(
+            df_labeled[df_labeled['workload'].isin(train_wls)],
+            df_labeled[df_labeled['workload'] == held_out],
+            f"Train: {'+'.join(train_wls)} -> Test: {held_out}"
+        )
 
 print("\n--- Final Model (Combined Data) ---")
 train_df, test_df = train_test_split(df_labeled, test_size=0.2, stratify=df_labeled["label"], random_state=42)
