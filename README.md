@@ -510,7 +510,7 @@ For paper-quality evaluation on real 2-socket NUMA hardware:
 
 ### 1. Provision a CloudLab Node
 
-Request a node with 2 physical NUMA nodes (e.g., `c6525-25g` or `r650` profiles).
+Request a node with 2 physical NUMA nodes (e.g., `r650` or `r6525` profiles on the Clemson cluster).
 
 ### 2. Build Without LOCAL_DEV
 
