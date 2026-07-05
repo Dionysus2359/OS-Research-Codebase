@@ -29,6 +29,8 @@ ml/traces/
 
 # Simulators (keep Python cache and object files ignored)
 simulator/*.csv
+simulator/*.txt
+!simulator/traces/pin_traces/*.txt
 
 # Python & OS
 __pycache__/
