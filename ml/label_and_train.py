@@ -9,71 +9,77 @@ import os
 print("Loading trace data...")
 df = pd.read_csv("trace_decaying_lfu.csv")
 
-# Filter to discriminative phases ONLY
-# In Phases 1,3,4,5 every page is accessed every epoch -> all get label=1 -> no signal
+# Filter to discriminative phases
+# Filter to discriminative phases
+# Phases 3,4,5 have dense PEBS signals. We include 2 and 6 as well.
 df_train = df[df["phase"].isin([2, 6])].copy()
 
 # Build MultiIndex for O(log N) lookups
 print("Building index...")
-df_lookup = df.set_index(["epoch", "page_idx"]).sort_index()
+df_lookup = df.set_index(["epoch", "page_va"]).sort_index()
 
 LOOKAHEAD_K = 10
-ACCESS_THRESHOLD = 6
+ACCESS_THRESHOLD = 4
 
 
-def label_page(epoch, page_idx, phase_at_T):
+phase_max_epoch = df.groupby("phase")["epoch"].max().to_dict()
+
+def label_page(epoch, page_va, phase_at_T):
     """Label a page at a given epoch using K-step lookahead."""
+    # Guard against phase boundary crossing
+    if epoch + LOOKAHEAD_K > phase_max_epoch[phase_at_T]:
+        return None
+
     count = 0
     for k in range(1, LOOKAHEAD_K + 1):
+        target_epoch = epoch + k
         try:
-            row = df_lookup.loc[(epoch + k, page_idx)]
+            row = df_lookup.loc[(target_epoch, page_va)]
+            count += int(row["accessed"])
         except KeyError:
-            return None  # epoch doesn't exist (end of workload)
-
-        # Guard against phase boundary crossing
-        if row["phase"] != phase_at_T:
-            return None
-
-        count += int(row["accessed"])
+            # If the epoch was skipped entirely, or the page wasn't tracked yet,
+            # it means there were 0 accesses for this page.
+            pass
+            
     return 1 if count >= ACCESS_THRESHOLD else 0
 
 
 FEATURE_COLS = [
     "smooth_frequency",  # index 0
-    "access_count",  # index 1
-    "momentum",  # index 2
-    "migration_history",  # index 3
-    "epochs_since_access",  # index 4
-    "hot_ratio",  # index 5
-    "access_frequency_ratio",  # index 6
+    "momentum",  # index 1
+    "migration_history",  # index 2
+    "epochs_since_access",
+    "hot_ratio",
+    "access_frequency_ratio",
+    "aci",
 ]
 
 print("Labeling data...")
 records = []
 epochs_in_scope = df_train["epoch"].unique()
-pages_in_scope = df_train["page_idx"].unique()
+pages_in_scope = df_train["page_va"].unique()
 
 for epoch in epochs_in_scope:
-    for page_idx in pages_in_scope:
+    for page_va in pages_in_scope:
         try:
-            row = df_lookup.loc[(epoch, page_idx)]
+            row = df_lookup.loc[(epoch, page_va)]
         except KeyError:
             continue
 
         phase_at_T = row["phase"]
-        label = label_page(epoch, page_idx, phase_at_T)
+        label = label_page(epoch, page_va, phase_at_T)
         if label is None:
-            continue  # boundary epoch or missing -> skip
+            continue  
 
         records.append(
             {
                 "smooth_frequency": row["smooth_frequency"],
-                "access_count": row["access_count"],
                 "momentum": row["momentum"],
                 "migration_history": row["migration_history"],
                 "epochs_since_access": row["epochs_since_access"],
                 "hot_ratio": row["hot_ratio"],
                 "access_frequency_ratio": row["access_frequency_ratio"],
+                "aci": row["aci"],
                 "label": label,
             }
         )

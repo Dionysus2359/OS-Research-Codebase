@@ -1,4 +1,50 @@
-old results/
-walkthrough, explanations etc/
-ml/trace_decaying_lfu.csv
+# Build artifacts
+*.o
+daemon/daemon
+workload/workload
+workload/stream
+daemon/bpf/vmlinux.h
+
+# GAPBS binaries
+workload/gapbs/bc
+workload/gapbs/bfs
+workload/gapbs/cc
+workload/gapbs/cc_sv
+workload/gapbs/converter
+workload/gapbs/pr
+workload/gapbs/pr_spmv
+workload/gapbs/sssp
+workload/gapbs/tc
+
+# Downloaded workloads
+workload/ycsb/
+
+# Results (reproducible, not tracked)
+results/
+simulator/results_gauntlet/
+
+# Traces and large data
+ml/*.csv
+ml/traces/
+
+# Simulators (keep Python cache and object files ignored)
+simulator/*.csv
+simulator/*.txt
+!simulator/traces/pin_traces/*.txt
+
+# Python & OS
+__pycache__/
+*.py[cod]
+.DS_Store
+perf.data
+
+# QEMU images
 qemu/
+
+# Documents (not code)
+Documents/
+Research Papers/
+implementation_plans and explanations/
+*.docx
+generate_report.py
+traces_backup.zip
