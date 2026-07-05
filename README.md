@@ -1,6 +1,8 @@
 ## ML-Assisted Memory Tiering for CXL Systems
 
-An intelligent, eBPF-driven memory page placement daemon for heterogeneous DRAM/CXL memory systems. Coeus monitors page-level access patterns in real time via hardware performance counters (Intel PEBS) and uses a trained logistic regression model with CUSUM change-point detection to decide which pages belong in fast DRAM and which can safely reside in slower CXL-attached memory.
+An intelligent, eBPF-driven memory page placement daemon for heterogeneous DRAM/CXL memory systems. The daemon monitors page-level access patterns in real time via hardware performance counters (Intel PEBS) and uses a trained logistic regression model with CUSUM change-point detection to decide which pages belong in fast DRAM and which can safely reside in slower CXL-attached memory.
+
+We evaluate our approach against **5 baselines** — LRU, LFU, Decaying LFU, AutoNUMA, and the state-of-the-art Kleio/Coeus hybrid schedulers — across **4 diverse workloads** (Synthetic, Graph Analytics, Streaming, and Database) using both a **trace-driven simulator** (adapted from the open-source [Coeus](https://github.com/GTkernel/coeus-sim) codebase) and a **real Linux daemon** on NUMA hardware.
 
 ## Table of Contents
 
@@ -9,7 +11,7 @@ An intelligent, eBPF-driven memory page placement daemon for heterogeneous DRAM/
 - [Workloads](#workloads)
 - [ML Pipeline](#ml-pipeline)
 - [CUSUM Change-Point Detection](#cusum-change-point-detection)
-- [Results](#results)
+- [Evaluation Metrics](#evaluation-metrics)
 - [Simulator](#simulator)
 - [Repository Structure](#repository-structure)
 - [Prerequisites](#prerequisites)
@@ -17,6 +19,7 @@ An intelligent, eBPF-driven memory page placement daemon for heterogeneous DRAM/
 - [Reproducing Results](#reproducing-results)
 - [Retraining the Model](#retraining-the-model)
 - [CloudLab Deployment](#cloudlab-deployment)
+- [References](#references)
 - [License](#license)
 
 ---
@@ -25,7 +28,7 @@ An intelligent, eBPF-driven memory page placement daemon for heterogeneous DRAM/
 
 Modern data centers increasingly pair fast, expensive DRAM with slower, high-capacity CXL-attached memory. The operating system must decide which memory pages belong in each tier. The Linux kernel's default page placement (AutoNUMA) reacts to page faults but lacks predictive intelligence, leading to excessive migrations and latency spikes.
 
-This project explores whether a lightweight ML model — trained offline on historical page-access traces collected via eBPF/PEBS — can make smarter promote/demote decisions than traditional heuristics (LRU, LFU, Decaying LFU) while minimizing costly `move_pages()` syscalls. We evaluate across **four diverse workloads** (Synthetic, Graph Analytics, Streaming, and Database) to demonstrate cross-workload generalization.
+This project explores whether a lightweight ML model — trained offline on historical page-access traces collected via eBPF/PEBS — can make smarter promote/demote decisions than traditional heuristics (LRU, LFU, Decaying LFU) while minimizing costly `move_pages()` syscalls.
 
 ---
 
@@ -37,7 +40,7 @@ The system is composed of four cooperating subsystems:
 ┌──────────────────────┐
 │     Workloads         │
 │  ┌────────────────┐  │       ┌─────────────────────────────────┐
-│  │ Synthetic      │  │       │     Coeus Monitoring Daemon      │
+│  │ Synthetic      │  │       │     ML Tiering Daemon            │
 │  │ GAPBS (BFS/PR) │──┼──────▶│     (C++17, runs as root)       │
 │  │ STREAM         │  │  IPC  │                                  │
 │  │ Redis + YCSB   │  │       │  ┌────────────┐  ┌───────────┐  │
@@ -79,7 +82,7 @@ The system is composed of four cooperating subsystems:
    - `aci` — Access Count Integral (cumulative area under access curve)
 3. **Decide** — The active policy scores each page:
    - **Classical policies** (LRU, LFU, Decaying LFU): score based on recency/frequency
-   - **ML policy**: applies `sigmoid(w · x + b)` using pre-trained, StandardScaler-normalized weights compiled into [`daemon/ml_weights.h`](daemon/ml_weights.h)
+   - **ML policy**: applies `sigmoid(w · x + b)` using pre-trained, StandardScaler-normalized weights compiled into [`ml_weights.h`](daemon/ml_weights.h)
 4. **Adapt** — The CUSUM change-point detector monitors the promotion rate signal. When a phase transition is detected (e.g., working set shift), it temporarily loosens migration thresholds to allow rapid adaptation, then tightens them to prevent thrashing.
 5. **Migrate** — Top-scoring cold-tier pages are promoted to Node 0 (DRAM); lowest-scoring hot-tier pages are demoted to Node 1 (CXL). Migrations use the `move_pages()` syscall.
 
@@ -128,7 +131,7 @@ Training traces are collected by running the daemon in **trace mode** (`--trace`
 
 ### Labeling Strategy
 
-The training script ([`ml/label_and_train_v2.py`](ml/label_and_train_v2.py)) uses **K-step lookahead labeling**:
+The training script ([`label_and_train_v2.py`](ml/label_and_train_v2.py)) uses **K-step lookahead labeling**:
 - For each page at epoch *t*, look ahead *K=10* epochs
 - If the page is accessed in ≥ 4 of the next 10 epochs → label **HOT** (promote)
 - Otherwise → label **COLD** (demote)
@@ -139,7 +142,7 @@ This forward-looking labeling teaches the model to predict *future* hotness rath
 
 - **Algorithm**: Logistic Regression with `class_weight='balanced'`
 - **Normalization**: StandardScaler (mean/std embedded into the C++ header)
-- **Deployment**: Weights, bias, scaler parameters are exported as `constexpr` arrays in [`daemon/ml_weights.h`](daemon/ml_weights.h) — **zero runtime dependency on Python**
+- **Deployment**: Weights, bias, scaler parameters are exported as `constexpr` arrays in [`ml_weights.h`](daemon/ml_weights.h) — **zero runtime dependency on Python**
 - **Inference cost**: A single dot product + sigmoid per page per epoch (~0ms overhead)
 
 ### Cross-Workload Validation (LOWO)
@@ -160,29 +163,71 @@ When a change-point is detected (e.g., the working set abruptly shifts):
 2. **Transition phase** (20 epochs): Thresholds gradually tighten via linear interpolation
 3. **Stable phase**: Conservative thresholds prevent unnecessary churn
 
-The tuned parameters (`ABS_THRESHOLD=0.30`, `DEMOTE_MARGIN=0.40`) were found via grid sweep ([`scripts/sweep_live.sh`](scripts/sweep_live.sh)).
+The tuned parameters (`ABS_THRESHOLD=0.30`, `DEMOTE_MARGIN=0.40`) were found via grid sweep ([`sweep_live.sh`](scripts/sweep_live.sh)).
 
 ---
 
-## Results
+## Evaluation Metrics
 
-(Results section content omitted for brevity)
+Both the real daemon and the trace-driven simulator report the following metrics:
+
+| Metric | Description |
+|--------|-------------|
+| **Hit Ratio (%)** | Fraction of total memory accesses served from the fast tier (DRAM / Node 0) |
+| **Misplaced (%)** | Normalized misplacement rate: `(Total Misplaced Epochs) / (Total Epochs × Fast Tier Capacity) × 100`. Measures the fraction of fast-tier slots occupied by cold pages across all epochs. Lower is better. |
+| **Avg Latency (ns)** | Estimated average memory access latency, weighted by hit/miss ratio and platform parameters |
+| **Total Migrations** | Total number of page migrations (promotions + demotions) across the entire run |
+| **Migration Cost (ms)** | Cumulative time spent in `move_pages()` syscalls |
+| **Slowdown (%)** | Simulated runtime slowdown compared to an all-fast-memory baseline (simulator only) |
+
+### Misplacement Rate
+
+The **Misplaced (%)** metric is the primary accuracy indicator. It is computed identically for all policies (LRU, LFU, ML, Kleio, Coeus) to ensure apples-to-apples comparison:
+
+1. At the end of each epoch, the **Oracle** identifies the ideal set of hot pages (top-K pages by actual access count)
+2. Any page in the Oracle's ideal set that the policy left in the slow tier counts as one misplacement event
+3. The total misplacement events are divided by `(Total Epochs × Fast Tier Capacity)` to produce a normalized percentage
+
+This normalization is critical because different policies (e.g., Kleio vs ML) may operate with different epoch durations, making raw counts incomparable.
 
 ---
 
 ## Simulator
 
-The `simulator/` directory contains a Python-based trace-driven memory tiering simulator, extended from the [Coeus](https://github.com/GTkernel/coeus-sim) framework. It replays Pin memory traces from 9 real-world applications (PARSEC, Rodinia, CORAL) and evaluates all policies under configurable DRAM/NVM capacity ratios.
+The `simulator/` directory contains a Python-based trace-driven memory tiering simulator, cloned from the open-source [Coeus/Kleio simulator](https://github.com/GTkernel/coeus-sim) by Doudali et al. We adapted it to support Python 3, added our own policies (LRU, LFU, Decaying LFU, ML), and implemented a normalized misplacement metric for apples-to-apples comparison against the original Kleio and Coeus hybrid schedulers.
+
+The simulator replays Intel Pin memory traces from 9 real-world applications (PARSEC, Rodinia, CORAL) and evaluates all policies under configurable DRAM/NVM capacity ratios.
+
+### Policies Evaluated
+
+| Policy | Type | Description |
+|--------|------|-------------|
+| **Oracle** | Upper Bound | Perfect future knowledge — places the truly hottest pages every epoch |
+| **History** | Heuristic | Previous-epoch access counts as predictor (original Cori baseline) |
+| **LRU** | Classical | Least Recently Used eviction |
+| **LFU** | Classical | Least Frequently Used eviction |
+| **Decaying LFU** | Classical | LFU with exponential decay to adapt to recency |
+| **ML** | Learned | Our logistic regression model using the same 6 features as the daemon |
+| **Kleio Hybrid** | State-of-art | LSTM-based predictor from Kleio (Doudali et al., HPDC 2019) |
+| **Coeus Hybrid** | State-of-art | Page clustering mechanism from Coeus (Doudali et al., CCGrid 2022) |
 
 ### Running the Simulator
 
-1. **Change directory**: `cd simulator`
-2. **Run all policies**: `python3 run_gauntlet.py`
-   *(This runs History, Oracle, LRU, LFU, Decaying LFU, ML, and Kleio across all 9 apps with capacity sweeps)*
-3. **Parse and compare**: `python3 parse_results.py`
-   *(Outputs comparative markdown tables including Hitrate, Migrations, runtime overheads, and true Misplacement counts)*
+```bash
+cd simulator
 
-The simulator includes a large set of Pin traces (~97MB) in `simulator/traces/pin_traces/` required to reproduce these results.
+# Run all policies across all 9 apps with capacity sweeps
+python3 run_gauntlet.py
+
+# Parse results into comparative markdown tables
+python3 parse_results.py
+```
+
+Output includes Hitrate, Runtime, Overhead, Migrations, Slowdown, and normalized Misplaced(%) for every policy × app × capacity ratio combination.
+
+### Simulator Traces
+
+The `simulator/traces/pin_traces/` directory contains Intel Pin memory access traces (~97MB total) for 9 applications from the PARSEC, Rodinia, and CORAL benchmark suites. These are the same traces used in the original Coeus/Kleio papers.
 
 ---
 
@@ -193,7 +238,7 @@ project/
 ├── daemon/                      # Core monitoring daemon (C++17)
 │   ├── daemon.cpp               # Main loop: attach → sample → decide → migrate
 │   ├── ebpf_sampler.cpp/.h      # eBPF/PEBS hardware sampling interface
-│   ├── policy.cpp/.h            # Policy engine: LRU, LFU, Decaying LFU, ML
+│   ├── policy.cpp/.h            # Policy engine: LRU, LFU, Decaying LFU, ML, Random
 │   ├── tier_manager.cpp/.h      # NUMA page management, move_pages(), feature tracking
 │   ├── cusum.cpp/.h             # Adaptive CUSUM change-point detector
 │   ├── ml_weights.h             # Auto-generated model weights (DO NOT EDIT manually)
@@ -207,9 +252,7 @@ project/
 │   ├── workload.cpp/.h          # Synthetic 6-phase memory stress test
 │   ├── stream.c                 # STREAM memory bandwidth benchmark
 │   ├── gapbs/                   # GAP Benchmark Suite (BFS, PR, etc.)
-│   │   └── src/                 # GAPBS source (compiled via its own Makefile)
-│   ├── ycsb/                    # Yahoo Cloud Serving Benchmark (git-ignored, downloaded)
-│   └── Makefile
+│   └── ycsb/                    # Yahoo Cloud Serving Benchmark (git-ignored, downloaded)
 │
 ├── ml/                          # ML training pipeline (Python)
 │   ├── label_and_train_v2.py    # Multi-workload labeling, training, LOWO, weight export
@@ -217,21 +260,42 @@ project/
 │   ├── requirements.txt         # Python dependencies: pandas, scikit-learn, numpy
 │   └── traces/                  # Trace CSVs generated by daemon --trace (git-ignored)
 │
-├── scripts/                     # Automated benchmark runners
+├── scripts/                     # Automated benchmark runners & analysis
 │   ├── run_baselines.sh         # Run all policies on the synthetic workload
 │   ├── run_gapbs.sh             # Run GAPBS (BFS/PR) with all policies or trace mode
 │   ├── run_redis.sh             # Run Redis+YCSB with all policies or trace mode
 │   ├── run_stream.sh            # Run STREAM benchmark with all policies
+│   ├── compare_metrics.py       # Parse daemon summary CSVs → comparison tables
 │   ├── sweep_live.sh            # Grid sweep for CUSUM threshold tuning
 │   ├── train_ml.sh              # End-to-end: collect traces → train → rebuild
 │   └── ycsb_patched.py          # Python 3 patched YCSB runner (auto-injected)
 │
-├── results/                     # Benchmark outputs (git-ignored)
-│   ├── compare_metrics.py       # Parse summary CSVs and print comparison tables
-│   ├── gapbs/                   # GAPBS results (per-kernel, per-policy)
-│   ├── redis/                   # Redis+YCSB results
-│   └── stream/                  # STREAM results
+├── simulator/                   # Trace-driven simulator (adapted from Coeus/Kleio)
+│   ├── sim/                     # Core simulator engine (modified)
+│   │   ├── scheduler.py         # Epoch-based scheduler with misplacement tracking
+│   │   ├── memory.py            # Tiered memory model (added LRU, LFU, Decaying LFU, ML)
+│   │   ├── perf_model.py        # Performance model and metrics computation
+│   │   ├── profile.py           # Trace profile loader
+│   │   └── traffic.py           # Memory traffic generator from traces
+│   ├── kleio/                   # Original Kleio/Coeus hybrid scheduler (from authors)
+│   │   ├── page_selector.py     # Page clustering and hybrid scheduling logic
+│   │   └── lstm.py              # LSTM-based page access predictor (Kleio)
+│   ├── run_gauntlet.py          # Our runner: all policies across all 9 apps + sweeps
+│   ├── run_across_apps.py       # Original Kleio runner (from authors)
+│   ├── run_cluster.py           # Original Coeus clustering analysis (from authors)
+│   ├── parse_results.py         # Parse simulator CSVs → comparative markdown tables
+│   ├── retrain_coeus.py         # Retrain Coeus features on new traces
+│   ├── extract_coeus_features.py # Extract clustering features from traces
+│   ├── sweep_margins.py         # Sweep ML margins in simulator
+│   ├── ml_weights.h             # Simulator copy of ML weights for the ML policy
+│   └── traces/
+│       ├── pin_traces/          # Intel Pin memory traces for 9 apps (~97MB)
+│       ├── memtrace.cpp         # Pin tool source for generating new traces
+│       └── README.md            # Trace format documentation
 │
+├── results/                     # Daemon benchmark outputs (git-ignored, reproducible)
+│
+├── .gitignore
 └── README.md
 ```
 
@@ -242,7 +306,7 @@ project/
 ### System Requirements
 
 - **Linux** kernel ≥ 5.8 with BTF support (for eBPF CO-RE)
-- **NUMA Hardware**: At least **2 NUMA nodes** (physical hardware or emulated via `numactl`). 
+- **NUMA Hardware**: At least **2 NUMA nodes** (physical hardware or emulated via `numactl`).
   - *Note on Large Workloads:* By default, the fast tier is Node 0 and the slow tier is Node 1. For massive memory workloads (e.g., GAPBS Scale ≥ 24, Redis Scale ≥ 2), the scripts will automatically detect and utilize Node 2 as the slow tier if your system has a 3+ node topology. If Node 2 is not found, they gracefully fall back to Node 1.
 - **Root access** (daemon requires eBPF attachment and `move_pages()`)
 
@@ -278,10 +342,11 @@ Install on **Ubuntu/Debian**:
 sudo apt install redis-server default-jdk
 ```
 
-### Python Dependencies (for ML training only)
+### Python Dependencies
 
+For **ML training** and **simulator**:
 ```bash
-pip install -r ml/requirements.txt
+pip install pandas scikit-learn numpy
 ```
 
 ---
@@ -289,6 +354,11 @@ pip install -r ml/requirements.txt
 ## Getting Started
 
 ### 1. Clone the Repository
+
+```bash
+git clone https://github.com/Dionysus2359/OS-Research-Codebase.git
+cd OS-Research-Codebase
+```
 
 ### 2. Build Everything
 
@@ -331,39 +401,53 @@ numactl --hardware
 
 All benchmark scripts handle building, cache-clearing, environment setup, daemon lifecycle, and result collection automatically. Just run them with `sudo`.
 
-### Synthetic Workload (All Policies)
+### Daemon Evaluation (Real Hardware)
+
+#### Synthetic Workload
 
 ```bash
 sudo ./scripts/run_baselines.sh
-python3 results/compare_metrics.py
+python3 scripts/compare_metrics.py
 ```
 
-### GAPBS — Graph Analytics
+#### GAPBS — Graph Analytics
 
 ```bash
 # Scale 20 for quick local testing, Scale 24–25 for paper-quality results
 sudo ./scripts/run_gapbs.sh 20
-python3 results/compare_metrics.py gapbs
+python3 scripts/compare_metrics.py results/gapbs
 ```
 
-### Redis + YCSB
+#### Redis + YCSB
 
 ```bash
 # Scale 1 = 1M records (~1GB), Scale 5 = 5M records (~5GB)
 sudo ./scripts/run_redis.sh 1
-python3 results/compare_metrics.py redis
+python3 scripts/compare_metrics.py results/redis
 ```
 
-### STREAM
+#### STREAM
 
 ```bash
 sudo ./scripts/run_stream.sh
-python3 results/compare_metrics.py stream
+python3 scripts/compare_metrics.py results/stream
 ```
 
-### What Each Script Does
+### Simulator Evaluation (Trace-Driven)
 
-Every `run_*.sh` script performs these steps automatically:
+```bash
+cd simulator
+
+# Run all 8 policies across 9 apps with capacity sweeps (uses multiprocessing)
+python3 run_gauntlet.py
+
+# Parse and display results
+python3 parse_results.py
+```
+
+### What Each `run_*.sh` Script Does
+
+Every benchmark script performs these steps automatically:
 1. Compiles the daemon and workload from source
 2. Disables AutoNUMA and Transparent Huge Pages
 3. Drops filesystem caches and configures perf sample rates
@@ -446,10 +530,10 @@ sudo ./scripts/run_baselines.sh
 ### 4. Collect Results
 
 ```bash
-python3 results/compare_metrics.py
-python3 results/compare_metrics.py gapbs
-python3 results/compare_metrics.py redis
-python3 results/compare_metrics.py stream
+python3 scripts/compare_metrics.py
+python3 scripts/compare_metrics.py results/gapbs
+python3 scripts/compare_metrics.py results/redis
+python3 scripts/compare_metrics.py results/stream
 ```
 
 ---
@@ -463,10 +547,29 @@ python3 results/compare_metrics.py stream
 | Change-Point Detection | Adaptive CUSUM with Welford's online mean/variance |
 | ML Training | Python 3, scikit-learn (Logistic Regression), pandas, NumPy |
 | ML Deployment | Compile-time weight embedding via auto-generated C++ header |
+| Simulator | Adapted from [Coeus/Kleio](https://github.com/GTkernel/coeus-sim) (Python, modified for Python 3 + our policies) |
 | Graph Benchmarks | [GAP Benchmark Suite](https://github.com/sbeamer/gapbs) (BFS, PageRank) |
 | Database Benchmark | [Redis](https://redis.io/) + [YCSB](https://github.com/brianfrankcooper/YCSB) |
 | Memory Bandwidth | [STREAM](https://www.cs.virginia.edu/stream/) |
 | Automation | Bash scripts with full lifecycle management |
+
+---
+
+## References
+
+The trace-driven simulator in `simulator/` is adapted from the open-source code accompanying the following papers:
+
+- **Coeus: Clustering (A)like Patterns for Practical Machine Intelligent Hybrid Memory Management.**
+  Thaleia Dimitra Doudali, Ada Gavrilovska.
+  *IEEE/ACM CCGrid 2022.* [[Code]](https://github.com/GTkernel/coeus-sim)
+
+- **Cori: Dancing to the Right Beat of Periodic Data Movements over Hybrid Memory Systems.**
+  Thaleia Dimitra Doudali, Daniel Zahka, Ada Gavrilovska.
+  *IEEE IPDPS 2021.*
+
+- **Kleio: a Hybrid Memory Page Scheduler with Machine Intelligence.**
+  Thaleia Dimitra Doudali, Sergey Blagodurov, Abhinav Vishnu, Sudhanva Gurumurthi, Ada Gavrilovska.
+  *ACM HPDC 2019.*
 
 ---
 
