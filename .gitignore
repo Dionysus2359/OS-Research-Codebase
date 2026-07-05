@@ -48,3 +48,4 @@ implementation_plans and explanations/
 *.docx
 generate_report.py
 traces_backup.zip
+Daemon_Results_Report.md
