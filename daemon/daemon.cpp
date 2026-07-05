@@ -133,9 +133,12 @@ int main(int argc, char* argv[]) {
     int epoch = 0;
     int last_phase = -1;
     
+    // -------------------------------------------------------------
+    // PRINT CSV HEADER (Stdout is redirected to summary.csv by the shell script)
+    // -------------------------------------------------------------
     cout << "epoch,phase,epoch_accesses,epoch_hits,page_hit_rate,fast_tier_pages,"
          << "tracked_pages,total_migrations,epoch_promotions,epoch_demotions,"
-         << "migration_cost_ms,estimated_latency_ns" << endl;
+         << "migration_cost_ms,estimated_latency_ns,misplaced_pages" << endl;
 
     // Trace file (for ML training data collection)
     ofstream trace_file;
@@ -237,7 +240,8 @@ int main(int argc, char* argv[]) {
              << mgr.epoch_promotions << ","
              << mgr.epoch_demotions << ","
              << mgr.total_migration_latency_ms << ","
-             << est_latency_ns << endl;
+             << est_latency_ns << ","
+             << mgr.epoch_misplaced_pages << endl;
         
         cerr << "E" << epoch 
              << " P" << info.current_phase

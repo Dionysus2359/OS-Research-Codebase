@@ -10,6 +10,7 @@ An intelligent, eBPF-driven memory page placement daemon for heterogeneous DRAM/
 - [ML Pipeline](#ml-pipeline)
 - [CUSUM Change-Point Detection](#cusum-change-point-detection)
 - [Results](#results)
+- [Simulator](#simulator)
 - [Repository Structure](#repository-structure)
 - [Prerequisites](#prerequisites)
 - [Getting Started](#getting-started)
@@ -58,6 +59,11 @@ The system is composed of four cooperating subsystems:
                                │   (Python / scikit-learn) │
                                │   Logistic Regression     │
                                │   → ml_weights.h          │
+                               └───────────┬───────────────┘
+                                           │
+                               ┌───────────▼───────────────┐
+                               │   Trace-Driven Simulator   │
+                               │   (Python / Coeus/Kleio)  │
                                └───────────────────────────┘
 ```
 
@@ -155,6 +161,28 @@ When a change-point is detected (e.g., the working set abruptly shifts):
 3. **Stable phase**: Conservative thresholds prevent unnecessary churn
 
 The tuned parameters (`ABS_THRESHOLD=0.30`, `DEMOTE_MARGIN=0.40`) were found via grid sweep ([`scripts/sweep_live.sh`](scripts/sweep_live.sh)).
+
+---
+
+## Results
+
+(Results section content omitted for brevity)
+
+---
+
+## Simulator
+
+The `simulator/` directory contains a Python-based trace-driven memory tiering simulator, extended from the [Coeus](https://github.com/GTkernel/coeus-sim) framework. It replays Pin memory traces from 9 real-world applications (PARSEC, Rodinia, CORAL) and evaluates all policies under configurable DRAM/NVM capacity ratios.
+
+### Running the Simulator
+
+1. **Change directory**: `cd simulator`
+2. **Run all policies**: `python3 run_gauntlet.py`
+   *(This runs History, Oracle, LRU, LFU, Decaying LFU, ML, and Kleio across all 9 apps with capacity sweeps)*
+3. **Parse and compare**: `python3 parse_results.py`
+   *(Outputs comparative markdown tables including Hitrate, Migrations, runtime overheads, and true Misplacement counts)*
+
+The simulator includes a large set of Pin traces (~97MB) in `simulator/traces/pin_traces/` required to reproduce these results.
 
 ---
 

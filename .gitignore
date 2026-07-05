@@ -1,12 +1,11 @@
-qemu/
-results/
-daemon/bpf/vmlinux.h
-
-# Compiled binaries and object files
+# Build artifacts
 *.o
 daemon/daemon
 workload/workload
 workload/stream
+daemon/bpf/vmlinux.h
+
+# GAPBS binaries
 workload/gapbs/bc
 workload/gapbs/bfs
 workload/gapbs/cc
@@ -16,19 +15,34 @@ workload/gapbs/pr
 workload/gapbs/pr_spmv
 workload/gapbs/sssp
 workload/gapbs/tc
+
+# Downloaded workloads
 workload/ycsb/
-# Traces and CSVs
+
+# Results (reproducible, not tracked)
+results/
+simulator/results_gauntlet/
+
+# Traces and large data
 ml/*.csv
 ml/traces/
 
-# Simulators
-coeus-sim/
+# Simulators (keep Python cache and object files ignored)
+simulator/*.csv
 
 # Python & OS
 __pycache__/
 *.py[cod]
 .DS_Store
+perf.data
 
-# Auto-generated documents
+# QEMU images
+qemu/
+
+# Documents (not code)
+Documents/
+Research Papers/
+implementation_plans and explanations/
 *.docx
 generate_report.py
+traces_backup.zip

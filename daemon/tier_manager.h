@@ -51,6 +51,7 @@ public:
     double total_migration_latency_ms = 0;
     int epoch_accesses = 0;
     int epoch_hits = 0;
+    int epoch_misplaced_pages = 0;
 
     // Per-epoch migration counters (reset by daemon each epoch)
     int epoch_promotions = 0;

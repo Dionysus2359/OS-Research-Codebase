@@ -107,6 +107,13 @@ void TierManager::detect_accesses(EbpfSampler& sampler) {
     for (auto& [page_va, meta] : pages_meta) {
         meta.aci = meta.smooth_frequency * LATENCY_PENALTY_NS * epoch_density;
     }
+
+    epoch_misplaced_pages = 0;
+    for (auto& [page_va, meta] : pages_meta) {
+        if (meta.current_node == 0 && !meta.accessed_this_epoch) {
+            epoch_misplaced_pages++;
+        }
+    }
 }
 
 void TierManager::update_page_nodes() {
