@@ -99,7 +99,7 @@ run_autonuma_baseline() {
 # ---- Build Phase ----
 echo "[*] Compiling workload and daemon..."
 make -C "$WORKLOAD_DIR" clean && make -C "$WORKLOAD_DIR"
-make -C "$DAEMON_DIR" clean && make -C "$DAEMON_DIR" LOCAL_DEV=1
+make -C "$DAEMON_DIR" clean && make -C "$DAEMON_DIR"
 
 sudo mkdir -p /root/results
 

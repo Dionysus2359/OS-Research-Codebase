@@ -52,7 +52,7 @@ sudo sysctl -w kernel.perf_event_max_sample_rate=50000 > /dev/null 2>&1 || true
 echo 0 | sudo tee /proc/sys/kernel/perf_cpu_time_max_percent > /dev/null || true
 
 # Build daemon
-make -C "$DAEMON_DIR" clean && make -C "$DAEMON_DIR" LOCAL_DEV=1
+make -C "$DAEMON_DIR" clean && make -C "$DAEMON_DIR"
 
 cleanup() {
     sudo killall daemon 2>/dev/null || true

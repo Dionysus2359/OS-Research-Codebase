@@ -370,10 +370,8 @@ cd workload && make && cd ..
 cd workload/gapbs && make && cd ../..
 
 # Build the daemon (generates vmlinux.h on first build)
-cd daemon && make LOCAL_DEV=1 && cd ..
+cd daemon && make && cd ..
 ```
-
-> **Note:** Use `LOCAL_DEV=1` when building on a single-socket laptop/desktop that emulates CXL latency in software. Omit it for real 2-socket NUMA hardware (e.g., CloudLab).
 
 ### 3. Download YCSB (for Redis workload only)
 
@@ -493,7 +491,7 @@ This will:
 ### Step 3: Rebuild the Daemon
 
 ```bash
-cd daemon && make clean && make LOCAL_DEV=1
+cd daemon && make clean && make
 ```
 
 ### Automated End-to-End

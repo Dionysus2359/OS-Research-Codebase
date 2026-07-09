@@ -17,7 +17,7 @@ echo 0 | sudo tee /proc/sys/kernel/perf_cpu_time_max_percent > /dev/null || true
 
 echo "[*] Compiling workload and daemon..."
 make -C ../workload clean && make -C ../workload
-make -C ../daemon clean && make -C ../daemon LOCAL_DEV=1
+make -C ../daemon clean && make -C ../daemon
 
 echo "[*] Starting workload for trace collection..."
 echo 0 | sudo tee /proc/sys/kernel/numa_balancing > /dev/null
@@ -46,7 +46,7 @@ sudo chown $REAL_USER:$REAL_USER ../ml/trace_random.csv 2>/dev/null || true
 
 echo "[*] Recompiling daemon with new weights..."
 cd ../daemon
-make clean && make LOCAL_DEV=1
+make clean && make
 
 echo 1 | sudo tee /proc/sys/kernel/numa_balancing > /dev/null
 echo always | sudo tee /sys/kernel/mm/transparent_hugepage/enabled > /dev/null

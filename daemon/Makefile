@@ -2,11 +2,7 @@ CXX = g++
 CXXFLAGS = -Wall -Wextra -O2 -std=c++17
 LDFLAGS = -lnuma -lm -lbpf -lelf -lz
 
-# Set LOCAL_DEV=1 for laptop testing (injects CXL latency penalty)
-# Unset for CloudLab/real NUMA hardware
-ifdef LOCAL_DEV
-CXXFLAGS += -DLOCAL_DEV
-endif
+
 
 TARGET = daemon
 
