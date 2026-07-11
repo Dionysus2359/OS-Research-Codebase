@@ -42,6 +42,11 @@ while [ $# -gt 0 ]; do
     shift
 done
 
+# Automatically enable LARGE_MODE if SCALE >= 5 to prevent FTC choke
+if [ "$SCALE" -ge 5 ]; then
+    LARGE_MODE=true
+fi
+
 # Calculate records and operations based on scale
 # Scale 1 = 1 million records (~1GB) and 2 million operations
 RECORD_COUNT=$((SCALE * 1000000))
@@ -83,7 +88,7 @@ run_redis_workload() {
             echo "[WARN] Large mode requested but Node 2 not found! Falling back to Node 1."
             MEMBIND=1
         fi
-        FTC=70000
+        FTC=262144
     fi
 
     # TRAP 1: Start Redis with BGSAVE disabled (--save "") on the slow node
@@ -192,6 +197,9 @@ run_redis_autonuma() {
     sleep 2
 
     export JAVA_OPTS="-Xmx1g -Xms1g"
+
+    cat /proc/vmstat | grep numa > "${RESULTS_DIR}/redis_autonuma_vmstat_before.txt"
+    numastat > "${RESULTS_DIR}/redis_autonuma_numastat_before.txt"
 
     echo "[*] Loading YCSB dataset (${RECORD_COUNT} records)..."
     numactl --cpubind=0 \

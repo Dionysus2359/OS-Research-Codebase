@@ -54,6 +54,7 @@ run_daemon_baseline() {
 
     # Start daemon with workload PID
     sudo "$DAEMON_DIR/daemon" "$POLICY" --pid "$WORKLOAD_PID" \
+        --slow-node 1 --fast-tier-capacity 410 --max-promotions 256 --max-demotions 256 \
         > "$RESULTS_DIR/${POLICY}_summary.csv" \
         2> "$RESULTS_DIR/${POLICY}_stderr.log" &
     DAEMON_PID=$!

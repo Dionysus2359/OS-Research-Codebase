@@ -4,6 +4,8 @@
 #include <cmath>
 #include "ml_weights.h"
 #include <random>
+#include <chrono>
+#include <iostream>
 
 using namespace std;
 
@@ -146,6 +148,9 @@ void MLPolicy::execute(TierManager& mgr) {
     vector<ScoredPage> slow_candidates;
     vector<ScoredPage> fast_pages;
     
+    // 1. Start the high-resolution timer
+    auto start_time = std::chrono::high_resolution_clock::now();
+    
     for (auto& pair : meta) {
         auto& pm = pair.second;
         
@@ -162,6 +167,15 @@ void MLPolicy::execute(TierManager& mgr) {
             fast_pages.push_back({pm.page_va, s});
         }
     }
+    
+    // 2. Stop the timer
+    auto end_time = std::chrono::high_resolution_clock::now();
+    
+    // 3. Calculate duration in microseconds
+    auto duration = std::chrono::duration_cast<std::chrono::microseconds>(end_time - start_time).count();
+    
+    // 4. Print safely to STDERR so it doesn't break your CSV output
+    std::cerr << "[Microbenchmark] ML Epoch Inference Time: " << duration << " microseconds\n";
     
     // Slow candidates descending by score (hottest first for promotion)
     sort(slow_candidates.begin(), slow_candidates.end(),

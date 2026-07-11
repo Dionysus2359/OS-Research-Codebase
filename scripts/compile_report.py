@@ -1,7 +1,8 @@
 import subprocess
 import os
 
-out_path = '/home/dionysus/Projects/Os Project/project/Daemon_Results_Report.md'
+project_dir = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+out_path = os.path.join(project_dir, 'Daemon_Results_Report.md')
 base_cmd = ['python3', 'scripts/compare_metrics.py']
 
 dirs = {
@@ -21,7 +22,7 @@ with open(out_path, 'w') as f:
         # but wrapping in raw text might be cleaner since compare_metrics outputs tables.
         # Let's just output directly.
         try:
-            output = subprocess.check_output(base_cmd + [target_dir], cwd='/home/dionysus/Projects/Os Project/project', text=True)
+            output = subprocess.check_output(base_cmd + [target_dir], cwd=project_dir, text=True)
             f.write(output)
         except subprocess.CalledProcessError as e:
             f.write(f"Failed to generate results: {e}\n")

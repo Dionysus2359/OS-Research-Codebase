@@ -101,7 +101,12 @@ def main():
             res = parse_csv(filepath)
             if res:
                 # Attempt to parse Application Time
+                base_dir = os.path.basename(os.path.normpath(target_dir))
+                
                 stdout_path = os.path.join(target_dir, f"{prefix}{p}_stdout.log")
+                if not os.path.exists(stdout_path) and base_dir == "stream":
+                    stdout_path = os.path.join(target_dir, f"stream_{p}_stdout.log")
+                    
                 if os.path.exists(stdout_path):
                     try:
                         with open(stdout_path, 'r') as f:
@@ -110,8 +115,25 @@ def main():
                                     res['app_time'] = float(line.split()[2])
                                 elif line.startswith('Copy:'):
                                     res['app_time'] = float(line.split()[2])
-                                elif '[OVERALL], RunTime(ms),' in line:
+                                elif '[OVERALL], RunTime(ms)' in line:
                                     res['app_time'] = float(line.split(',')[2].strip()) / 1000.0
+                    except Exception:
+                        pass
+                        
+                # Attempt to parse Microbenchmark overhead from stderr
+                stderr_path = os.path.join(target_dir, f"{prefix}{p}_stderr.log")
+                if os.path.exists(stderr_path):
+                    try:
+                        with open(stderr_path, 'r') as f:
+                            sum_ov = 0.0
+                            count_ov = 0
+                            for line in f:
+                                if '[Microbenchmark] ML Epoch Inference Time:' in line:
+                                    val = float(line.split(':')[1].split()[0])
+                                    sum_ov += val
+                                    count_ov += 1
+                            if count_ov > 0:
+                                res['overhead_us'] = sum_ov / count_ov
                     except Exception:
                         pass
                 results[p] = res
@@ -125,14 +147,15 @@ def main():
         
         # Print Markdown Table
         print("\n### Absolute Metrics")
-        print(f"| {'Policy':<12} | {'App Time (s)':>12} | {'Hit Ratio':>10} | {'Misplaced(%)':>12} | {'Avg Lat (ns)':>12} | {'Total Migrations':>16} | {'Mig Cost (ms)':>13} | {'Proms/Epoch':>11} | {'Dems/Epoch':>10} |")
-        print(f"|{'-'*14}|{'-'*14}|{'-'*12}|{'-'*14}|{'-'*14}|{'-'*18}|{'-'*15}|{'-'*13}|{'-'*12}|")
+        print(f"| {'Policy':<12} | {'App Time (s)':>12} | {'Hit Ratio':>10} | {'Misplaced(%)':>12} | {'Avg Lat (ns)':>12} | {'Total Migrations':>16} | {'Mig Cost (ms)':>13} | {'Proms/Epoch':>11} | {'Dems/Epoch':>10} | {'Overhead(us)':>12} |")
+        print(f"|{'-'*14}|{'-'*14}|{'-'*12}|{'-'*14}|{'-'*14}|{'-'*18}|{'-'*15}|{'-'*13}|{'-'*12}|{'-'*14}|")
         
         for p in policies:
             if p in results:
                 r = results[p]
                 app_time_str = f"{r['app_time']:.2f}" if r.get('app_time') is not None else "N/A"
-                print(f"| {p:<12} | {app_time_str:>12} | {r['hit_ratio']*100:>9.2f}% | {r['misplacement_ratio']*100:>11.2f}% | {r['avg_latency']:>12.2f} | {r['total_migrations']:>16,d} | {r['total_migration_cost']:>13.2f} | {r['avg_promotions']:>11.2f} | {r['avg_demotions']:>10.2f} |")
+                ov_str = f"{r['overhead_us']:.0f}" if r.get('overhead_us') is not None else "N/A"
+                print(f"| {p:<12} | {app_time_str:>12} | {r['hit_ratio']*100:>9.2f}% | {r['misplacement_ratio']*100:>11.2f}% | {r['avg_latency']:>12.2f} | {r['total_migrations']:>16,d} | {r['total_migration_cost']:>13.2f} | {r['avg_promotions']:>11.2f} | {r['avg_demotions']:>10.2f} | {ov_str:>12} |")
                 
         # Print Improvements (ML vs Decaying LFU)
         if 'ml' in results and 'decaying_lfu' in results:
@@ -163,10 +186,11 @@ def main():
         
         # Fallbacks for synthetic and stream runs
         if not os.path.exists(autonuma_before):
-            if target_dir == ".":
+            base_dir = os.path.basename(os.path.normpath(target_dir))
+            if base_dir == "results" or target_dir == ".":
                 autonuma_before = os.path.join(target_dir, "autonuma_before.txt")
                 autonuma_after = os.path.join(target_dir, "autonuma_after.txt")
-            elif target_dir == "stream":
+            elif base_dir == "stream":
                 autonuma_before = os.path.join(target_dir, "stream_autonuma_vmstat_before.txt")
                 autonuma_after = os.path.join(target_dir, "stream_autonuma_vmstat_after.txt")
         
@@ -188,8 +212,9 @@ def main():
                 print(f"- **Total Migrations**: {total_autonuma_mig:,}")
                 
                 # Try to parse execution time for autonuma
+                base_dir = os.path.basename(os.path.normpath(target_dir))
                 autonuma_stdout = os.path.join(target_dir, f"{prefix}autonuma_stdout.log")
-                if target_dir == "stream" and not os.path.exists(autonuma_stdout):
+                if base_dir == "stream" and not os.path.exists(autonuma_stdout):
                     autonuma_stdout = os.path.join(target_dir, "stream_autonuma_stdout.log")
                     
                 auto_time = None
@@ -200,6 +225,8 @@ def main():
                                 auto_time = float(line.split()[2])
                             elif line.startswith('Copy:'):
                                 auto_time = float(line.split()[2])
+                            elif '[OVERALL], RunTime(ms)' in line:
+                                auto_time = float(line.split(',')[2].strip()) / 1000.0
                 
                 if auto_time is not None:
                     print(f"- **App Time (s)**:     {auto_time:.2f}")

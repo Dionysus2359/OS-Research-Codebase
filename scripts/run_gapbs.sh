@@ -75,10 +75,10 @@ run_gapbs_kernel() {
         # Dynamic Capacity: Give BFS room to breathe, keep PR under the hardware limit
         if [ "$KERNEL" == "pr" ]; then
             TRIALS=250
-            FTC=50000
+            FTC=786432
         else
             TRIALS=1000
-            FTC=70000
+            FTC=786432
         fi
         
         DAEMON_ARGS=("--slow-node" "$MEMBIND" "--fast-tier-capacity" "$FTC" "--max-promotions" "4096" "--max-demotions" "4096")
