@@ -15,9 +15,7 @@ PROJECT_ROOT="$(cd "$SCRIPT_DIR/.." && pwd)"
 WORKLOAD_DIR="${PROJECT_ROOT}/workload"
 YCSB_DIR="${WORKLOAD_DIR}/ycsb"
 DAEMON_DIR="${PROJECT_ROOT}/daemon"
-RESULTS_DIR="${PROJECT_ROOT}/results/redis"
-
-mkdir -p "$RESULTS_DIR"
+RESULTS_BASE="${PROJECT_ROOT}/results/redis"
 
 TRACE_MODE=false
 LARGE_MODE=false
@@ -239,17 +237,25 @@ elif [ "$ML_ONLY" == "true" ]; then
     POLICIES=("ml")
 fi
 
-for POLICY in "${POLICIES[@]}"; do
-    run_redis_workload "$POLICY"
-done
+for RUN in {1..3}; do
+    echo "=================================================="
+    echo "Starting Run $RUN..."
+    echo "=================================================="
+    RESULTS_DIR="${RESULTS_BASE}/run_${RUN}"
+    mkdir -p "$RESULTS_DIR"
 
-if [ "$TRACE_MODE" != "true" ] && [ "$ML_ONLY" != "true" ]; then
-    run_redis_autonuma
-fi
+    for POLICY in "${POLICIES[@]}"; do
+        run_redis_workload "$POLICY"
+    done
+
+    if [ "$TRACE_MODE" != "true" ] && [ "$ML_ONLY" != "true" ]; then
+        run_redis_autonuma
+    fi
+done
 
 echo "=========================================="
 if [ "$TRACE_MODE" == "true" ]; then
     echo "Redis trace collection complete. Trace in ${PROJECT_ROOT}/ml/traces"
 else
-    echo "All Redis baselines complete. Results in $RESULTS_DIR"
+    echo "All Redis baselines complete. Results in $RESULTS_BASE"
 fi

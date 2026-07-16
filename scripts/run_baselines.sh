@@ -15,9 +15,7 @@ PROJECT_ROOT="$(cd "$SCRIPT_DIR/.." && pwd)"
 
 WORKLOAD_DIR="${PROJECT_ROOT}/workload"
 DAEMON_DIR="${PROJECT_ROOT}/daemon"
-RESULTS_DIR="${PROJECT_ROOT}/results"
-
-mkdir -p "$RESULTS_DIR"
+RESULTS_BASE="${PROJECT_ROOT}/results/synthetic"
 
 # Force the kernel ceiling up and disable PMU auto-throttling
 sudo sysctl -w kernel.perf_event_max_sample_rate=50000 > /dev/null 2>&1 || true
@@ -62,7 +60,7 @@ run_daemon_baseline() {
     # Wait for workload to finish
     wait $WORKLOAD_PID 2>/dev/null || true
     sleep 2
-    sudo kill $DAEMON_PID 2>/dev/null || true
+    sudo kill -SIGINT $DAEMON_PID 2>/dev/null || true
     wait $DAEMON_PID 2>/dev/null || true
     
     echo 1 | sudo tee /proc/sys/kernel/numa_balancing > /dev/null
@@ -105,11 +103,19 @@ make -C "$DAEMON_DIR" clean && make -C "$DAEMON_DIR"
 sudo mkdir -p /root/results
 
 # ---- Execute Baselines ----
-run_daemon_baseline "lru"
-run_daemon_baseline "lfu"
-run_daemon_baseline "decaying_lfu"
-run_autonuma_baseline
-run_daemon_baseline "ml"
+for RUN in {1..3}; do
+    echo "=================================================="
+    echo "Starting Run $RUN..."
+    echo "=================================================="
+    RESULTS_DIR="${RESULTS_BASE}/run_${RUN}"
+    mkdir -p "$RESULTS_DIR"
+
+    run_daemon_baseline "lru"
+    run_daemon_baseline "lfu"
+    run_daemon_baseline "decaying_lfu"
+    run_autonuma_baseline
+    run_daemon_baseline "ml"
+done
 
 echo "=================================================="
-echo "All baselines completed. Results in $RESULTS_DIR"
+echo "All baselines completed. Results in $RESULTS_BASE"

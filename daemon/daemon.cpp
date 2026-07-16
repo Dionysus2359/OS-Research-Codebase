@@ -138,7 +138,7 @@ int main(int argc, char* argv[]) {
     // -------------------------------------------------------------
     cout << "epoch,phase,epoch_accesses,epoch_hits,page_hit_rate,fast_tier_pages,"
          << "tracked_pages,total_migrations,epoch_promotions,epoch_demotions,"
-         << "migration_cost_ms,estimated_latency_ns,misplaced_pages" << endl;
+         << "migration_cost_ms,estimated_latency_ns,cxl_estimated_latency_ns,misplaced_pages" << endl;
 
     // Trace file (for ML training data collection)
     ofstream trace_file;
@@ -186,14 +186,6 @@ int main(int argc, char* argv[]) {
         mgr.detect_accesses(sampler);
         mgr.update_page_nodes();
         
-        if (mgr.epoch_accesses == 0) {
-            epoch++;
-            auto epoch_end = high_resolution_clock::now();
-            double epoch_ms = duration<double, std::milli>(epoch_end - epoch_start).count();
-            if (epoch_ms < 100.0) usleep((int)((100.0 - epoch_ms) * 1000));
-            continue;
-        }
-
         // Write per-page trace data for ML training
         if (trace_mode && trace_file.is_open()) {
             auto& meta_map = mgr.get_metadata();
@@ -217,7 +209,10 @@ int main(int argc, char* argv[]) {
             trace_file.flush();
         }
 
-        double page_hit_rate = (double)mgr.epoch_hits / mgr.epoch_accesses;
+        double page_hit_rate = 0.0;
+        if (mgr.epoch_accesses > 0) {
+            page_hit_rate = (double)mgr.epoch_hits / mgr.epoch_accesses;
+        }
         // Asymmetric CXL model: reads use SLOW_LATENCY_NS, writes use SLOW_WRITE_LATENCY_NS
         long slow_accesses = mgr.epoch_accesses - mgr.epoch_hits;
         long slow_reads = (long)(slow_accesses * (1.0 - WRITE_RATIO));
@@ -225,6 +220,10 @@ int main(int argc, char* argv[]) {
         long est_latency_ns = (long)mgr.epoch_hits * FAST_LATENCY_NS 
                             + slow_reads * SLOW_LATENCY_NS
                             + slow_writes * SLOW_WRITE_LATENCY_NS;
+                            
+        long cxl_latency_ns = (long)mgr.epoch_hits * CXL_FAST_LATENCY_NS 
+                            + slow_reads * CXL_SLOW_LATENCY_NS
+                            + slow_writes * CXL_SLOW_WRITE_LATENCY_NS;
         
         policy->execute(mgr);
         mgr.update_page_nodes();
@@ -241,6 +240,7 @@ int main(int argc, char* argv[]) {
              << mgr.epoch_demotions << ","
              << mgr.total_migration_latency_ms << ","
              << est_latency_ns << ","
+             << cxl_latency_ns << ","
              << mgr.epoch_misplaced_pages << endl;
         
         cerr << "E" << epoch 

@@ -8,8 +8,7 @@ base_cmd = ['python3', 'scripts/compare_metrics.py']
 dirs = {
     'Synthetic Workload': 'results',
     'GAPBS': 'results/gapbs',
-    'Redis + YCSB': 'results/redis',
-    'STREAM': 'results/stream'
+    'Redis + YCSB': 'results/redis'
 }
 
 with open(out_path, 'w') as f:

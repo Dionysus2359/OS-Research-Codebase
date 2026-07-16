@@ -103,7 +103,7 @@ void TierManager::detect_accesses(EbpfSampler& sampler) {
         ? (double)epoch_accesses / unique_pages_accessed
         : 1.0;
 
-    constexpr double LATENCY_PENALTY_NS = 400.0 - 80.0; // Slow - Fast tier
+    constexpr double LATENCY_PENALTY_NS = (double)(SLOW_LATENCY_NS - FAST_LATENCY_NS); // Slow - Fast tier
     for (auto& [page_va, meta] : pages_meta) {
         meta.aci = meta.smooth_frequency * LATENCY_PENALTY_NS * epoch_density;
     }

@@ -14,7 +14,7 @@ PROJECT_ROOT="$(cd "$SCRIPT_DIR/.." && pwd)"
 
 GAPBS_DIR="${PROJECT_ROOT}/workload/gapbs"
 DAEMON_DIR="${PROJECT_ROOT}/daemon"
-RESULTS_DIR="${PROJECT_ROOT}/results/gapbs"
+RESULTS_BASE="${PROJECT_ROOT}/results/gapbs"
 SCALE=${1:-20}
 TRACE_MODE=false
 ABS_THRESH=""
@@ -32,8 +32,7 @@ while [ $# -gt 0 ]; do
     shift
 done
 
-mkdir -p "$RESULTS_DIR"
-
+# Removed mkdir -p "$RESULTS_DIR" since it happens in loop
 # Force PMU settings
 sudo sysctl -w kernel.perf_event_max_sample_rate=50000 > /dev/null 2>&1 || true
 echo 0 | sudo tee /proc/sys/kernel/perf_cpu_time_max_percent > /dev/null || true
@@ -136,7 +135,7 @@ run_gapbs_kernel() {
 
     wait $WL_PID 2>/dev/null || true
     sleep 2
-    sudo kill $DAEMON_PID 2>/dev/null || true
+    sudo kill -SIGINT $DAEMON_PID 2>/dev/null || true
     wait $DAEMON_PID 2>/dev/null || true
 
     if [ "$TRACE_MODE" == "true" ]; then
@@ -212,18 +211,26 @@ elif [ "$ML_ONLY" == "true" ]; then
 fi
 
 # Run workloads
-for KERNEL in "${KERNELS[@]}"; do
-    for POLICY in "${POLICIES[@]}"; do
-        run_gapbs_kernel "$KERNEL" "$POLICY"
+for RUN in {1..3}; do
+    echo "=================================================="
+    echo "Starting Run $RUN..."
+    echo "=================================================="
+    RESULTS_DIR="${RESULTS_BASE}/run_${RUN}"
+    mkdir -p "$RESULTS_DIR"
+
+    for KERNEL in "${KERNELS[@]}"; do
+        for POLICY in "${POLICIES[@]}"; do
+            run_gapbs_kernel "$KERNEL" "$POLICY"
+        done
+        if [ "$TRACE_MODE" != "true" ] && [ "$ML_ONLY" != "true" ]; then
+            run_gapbs_autonuma "$KERNEL"
+        fi
     done
-    if [ "$TRACE_MODE" != "true" ] && [ "$ML_ONLY" != "true" ]; then
-        run_gapbs_autonuma "$KERNEL"
-    fi
 done
 
 echo "=========================================="
 if [ "$TRACE_MODE" == "true" ]; then
     echo "GAPBS trace collection complete. Traces in ${PROJECT_ROOT}/ml/traces"
 else
-    echo "All GAPBS baselines complete. Results in $RESULTS_DIR"
+    echo "All GAPBS baselines complete. Results in $RESULTS_BASE"
 fi

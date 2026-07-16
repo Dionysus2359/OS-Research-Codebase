@@ -36,7 +36,7 @@ DAEMON_PID=$!
 
 wait $WL_PID 2>/dev/null || true
 sleep 2
-sudo kill $DAEMON_PID 2>/dev/null || true
+sudo kill -SIGINT $DAEMON_PID 2>/dev/null || true
 wait $DAEMON_PID 2>/dev/null || true
 
 echo "[*] Trace collected. Please run label_and_train_v2.py manually."

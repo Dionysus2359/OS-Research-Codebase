@@ -8,6 +8,7 @@ def parse_csv(filepath):
     total_demotions = 0
     total_epochs = 0
     total_latency_ns = 0
+    total_cxl_latency_ns = 0
     final_migration_cost = 0.0
     total_misplaced_pages = 0
     total_fast_tier_pages = 0
@@ -24,6 +25,7 @@ def parse_csv(filepath):
                 prom = int(row['epoch_promotions'])
                 dem = int(row['epoch_demotions'])
                 lat = float(row['estimated_latency_ns'])
+                cxl_lat = float(row.get('cxl_estimated_latency_ns', lat)) # Fallback if missing
                 mcost = float(row['migration_cost_ms'])
                 misplaced = int(row.get('misplaced_pages', 0))
                 ft_pages = int(row['fast_tier_pages'])
@@ -33,6 +35,7 @@ def parse_csv(filepath):
                 total_promotions += prom
                 total_demotions += dem
                 total_latency_ns += lat
+                total_cxl_latency_ns += cxl_lat
                 total_misplaced_pages += misplaced
                 total_fast_tier_pages += ft_pages
                 final_migration_cost = max(final_migration_cost, mcost)
@@ -41,14 +44,23 @@ def parse_csv(filepath):
                 continue
                 
     if total_accesses == 0:
-        return None
-        
-    if total_accesses == 0:
-        return None
+        return {
+            'hit_ratio': 0.0,
+            'misplacement_ratio': 0.0,
+            'avg_latency': 0.0,
+            'cxl_latency': 0.0,
+            'total_migrations': total_promotions + total_demotions,
+            'total_migration_cost': final_migration_cost,
+            'avg_promotions': 0.0 if total_epochs == 0 else total_promotions / total_epochs,
+            'avg_demotions': 0.0 if total_epochs == 0 else total_demotions / total_epochs,
+            'total_epochs': total_epochs,
+        }
         
     return {
         'hit_ratio': total_hits / total_accesses,
+        'misplacement_ratio': total_misplaced_pages / total_fast_tier_pages if total_fast_tier_pages > 0 else 0,
         'avg_latency': total_latency_ns / total_accesses,
+        'cxl_latency': total_cxl_latency_ns / total_accesses,
         'total_migrations': total_promotions + total_demotions,
         'total_migration_cost': final_migration_cost,
         'avg_promotions': total_promotions / total_epochs,
@@ -104,8 +116,6 @@ def main():
                 base_dir = os.path.basename(os.path.normpath(target_dir))
                 
                 stdout_path = os.path.join(target_dir, f"{prefix}{p}_stdout.log")
-                if not os.path.exists(stdout_path) and base_dir == "stream":
-                    stdout_path = os.path.join(target_dir, f"stream_{p}_stdout.log")
                     
                 if os.path.exists(stdout_path):
                     try:
@@ -147,15 +157,15 @@ def main():
         
         # Print Markdown Table
         print("\n### Absolute Metrics")
-        print(f"| {'Policy':<12} | {'App Time (s)':>12} | {'Hit Ratio':>10} | {'Misplaced(%)':>12} | {'Avg Lat (ns)':>12} | {'Total Migrations':>16} | {'Mig Cost (ms)':>13} | {'Proms/Epoch':>11} | {'Dems/Epoch':>10} | {'Overhead(us)':>12} |")
-        print(f"|{'-'*14}|{'-'*14}|{'-'*12}|{'-'*14}|{'-'*14}|{'-'*18}|{'-'*15}|{'-'*13}|{'-'*12}|{'-'*14}|")
+        print(f"| {'Policy':<12} | {'App Time (s)':>12} | {'Hit Ratio':>10} | {'Misplaced(%)':>12} | {'Avg Lat (ns)':>12} | {'CXL Lat (ns)':>12} | {'Total Migrations':>16} | {'Mig Cost (ms)':>13} | {'Proms/Epoch':>11} | {'Dems/Epoch':>10} | {'Overhead(us)':>12} |")
+        print(f"|{'-'*14}|{'-'*14}|{'-'*12}|{'-'*14}|{'-'*14}|{'-'*14}|{'-'*18}|{'-'*15}|{'-'*13}|{'-'*12}|{'-'*14}|")
         
         for p in policies:
             if p in results:
                 r = results[p]
-                app_time_str = f"{r['app_time']:.2f}" if r.get('app_time') is not None else "N/A"
+                app_time_str = f"{r['app_time']:.4f}" if r.get('app_time') is not None else "N/A"
                 ov_str = f"{r['overhead_us']:.0f}" if r.get('overhead_us') is not None else "N/A"
-                print(f"| {p:<12} | {app_time_str:>12} | {r['hit_ratio']*100:>9.2f}% | {r['misplacement_ratio']*100:>11.2f}% | {r['avg_latency']:>12.2f} | {r['total_migrations']:>16,d} | {r['total_migration_cost']:>13.2f} | {r['avg_promotions']:>11.2f} | {r['avg_demotions']:>10.2f} | {ov_str:>12} |")
+                print(f"| {p:<12} | {app_time_str:>12} | {r['hit_ratio']*100:>9.2f}% | {r['misplacement_ratio']*100:>11.2f}% | {r['avg_latency']:>12.2f} | {r['cxl_latency']:>12.2f} | {r['total_migrations']:>16,d} | {r['total_migration_cost']:>13.2f} | {r['avg_promotions']:>11.2f} | {r['avg_demotions']:>10.2f} | {ov_str:>12} |")
                 
         # Print Improvements (ML vs Decaying LFU)
         if 'ml' in results and 'decaying_lfu' in results:
@@ -165,7 +175,7 @@ def main():
             print("\n### ML Policy Improvements vs Decaying LFU")
             
             hit_diff = (ml['hit_ratio'] - dlfu['hit_ratio']) * 100
-            lat_diff = ((dlfu['avg_latency'] - ml['avg_latency']) / dlfu['avg_latency']) * 100
+            lat_diff = ((dlfu['avg_latency'] - ml['avg_latency']) / dlfu['avg_latency']) * 100 if dlfu['avg_latency'] > 0 else 0
             mig_diff = ((dlfu['total_migrations'] - ml['total_migrations']) / dlfu['total_migrations']) * 100 if dlfu['total_migrations'] > 0 else 0
             cost_diff = ((dlfu['total_migration_cost'] - ml['total_migration_cost']) / dlfu['total_migration_cost']) * 100 if dlfu['total_migration_cost'] > 0 else 0
             
@@ -184,15 +194,12 @@ def main():
         autonuma_before = os.path.join(target_dir, f"{prefix}autonuma_vmstat_before.txt")
         autonuma_after = os.path.join(target_dir, f"{prefix}autonuma_vmstat_after.txt")
         
-        # Fallbacks for synthetic and stream runs
+        # Fallbacks for synthetic runs
         if not os.path.exists(autonuma_before):
             base_dir = os.path.basename(os.path.normpath(target_dir))
             if base_dir == "results" or target_dir == ".":
                 autonuma_before = os.path.join(target_dir, "autonuma_before.txt")
                 autonuma_after = os.path.join(target_dir, "autonuma_after.txt")
-            elif base_dir == "stream":
-                autonuma_before = os.path.join(target_dir, "stream_autonuma_vmstat_before.txt")
-                autonuma_after = os.path.join(target_dir, "stream_autonuma_vmstat_after.txt")
         
         if os.path.exists(autonuma_before) and os.path.exists(autonuma_after):
             before_mig = 0
@@ -214,8 +221,6 @@ def main():
                 # Try to parse execution time for autonuma
                 base_dir = os.path.basename(os.path.normpath(target_dir))
                 autonuma_stdout = os.path.join(target_dir, f"{prefix}autonuma_stdout.log")
-                if base_dir == "stream" and not os.path.exists(autonuma_stdout):
-                    autonuma_stdout = os.path.join(target_dir, "stream_autonuma_stdout.log")
                     
                 auto_time = None
                 if os.path.exists(autonuma_stdout):

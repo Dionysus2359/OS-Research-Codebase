@@ -92,7 +92,7 @@ bool EbpfSampler::start_recording() {
     struct perf_event_attr attr = {};
     attr.type = 4;
     attr.config = 0x1cd;
-    attr.config1 = 4;
+    attr.config1 = 0;
     attr.size = sizeof(attr);
     attr.freq = 1;
     attr.sample_freq = 40000;
