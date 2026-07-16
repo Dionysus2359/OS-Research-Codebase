@@ -52,7 +52,7 @@ run_stream() {
 
     # Start daemon
     sudo "$DAEMON_DIR/daemon" "$POLICY" --pid "$WL_PID" \
-        --slow-node 1 --fast-tier-capacity 11776 --max-promotions 1024 --max-demotions 1024 \
+        --slow-node 1 --fast-tier-capacity 46875 --max-promotions 1024 --max-demotions 1024 \
         > "$RESULTS_DIR/${POLICY}_summary.csv" \
         2> "$RESULTS_DIR/${POLICY}_stderr.log" &
     DAEMON_PID=$!
