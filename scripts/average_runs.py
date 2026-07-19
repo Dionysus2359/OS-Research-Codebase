@@ -86,7 +86,7 @@ def main():
         print(f"No run_* directories found in {target_dir}.")
         sys.exit(1)
         
-    policies = ['lru', 'lfu', 'decaying_lfu', 'ml']
+    policies = ['lru', 'lfu', 'decaying_lfu', 'ml', 'autonuma']
     
     # Prefix -> Policy -> list of metrics dictionaries
     aggregated_results = defaultdict(lambda: defaultdict(list))
@@ -147,6 +147,53 @@ def main():
                 
                 aggregated_results[prefix][policy].append(res)
                 
+                # AutoNUMA parsing for average_runs
+                if policy == 'ml':  # Only parse once per run
+                    autonuma_before = os.path.join(run_dir, f"{prefix}autonuma_vmstat_before.txt")
+                    autonuma_after = os.path.join(run_dir, f"{prefix}autonuma_vmstat_after.txt")
+                    if not os.path.exists(autonuma_before):
+                        if os.path.exists(os.path.join(run_dir, "autonuma_before.txt")):
+                            autonuma_before = os.path.join(run_dir, "autonuma_before.txt")
+                            autonuma_after = os.path.join(run_dir, "autonuma_after.txt")
+                    
+                    if os.path.exists(autonuma_before) and os.path.exists(autonuma_after):
+                        before_mig = 0
+                        after_mig = 0
+                        try:
+                            with open(autonuma_before, 'r') as f:
+                                for l in f:
+                                    if 'numa_pages_migrated' in l:
+                                        before_mig = int(l.split()[1])
+                            with open(autonuma_after, 'r') as f:
+                                for l in f:
+                                    if 'numa_pages_migrated' in l:
+                                        after_mig = int(l.split()[1])
+                            if 'autonuma' not in aggregated_results[prefix]:
+                                aggregated_results[prefix]['autonuma'] = []
+                            
+                            auto_res = {'total_migrations': after_mig - before_mig}
+                            
+                            autonuma_stdout = os.path.join(run_dir, f"{prefix}autonuma_stdout.log")
+                            if not os.path.exists(autonuma_stdout):
+                                if os.path.exists(os.path.join(run_dir, "autonuma_workload_stdout.log")):
+                                    autonuma_stdout = os.path.join(run_dir, "autonuma_workload_stdout.log")
+                                elif os.path.exists(os.path.join(run_dir, "autonuma_stdout.log")):
+                                    autonuma_stdout = os.path.join(run_dir, "autonuma_stdout.log")
+                                
+                            if os.path.exists(autonuma_stdout):
+                                with open(autonuma_stdout, 'r') as f:
+                                    content = f.read()
+                                    import re
+                                    if "redis" in target_dir.lower():
+                                        m = re.search(r'\[OVERALL\], RunTime\(ms\), ([\d\.]+)', content)
+                                        if m: auto_res['app_time'] = float(m.group(1)) / 1000.0
+                                    else:
+                                        m = re.search(r'User: ([\d\.]+)', content)
+                                        if m: auto_res['app_time'] = float(m.group(1))
+                            
+                            aggregated_results[prefix]['autonuma'].append(auto_res)
+                        except Exception:
+                            pass
     for prefix, policy_runs in aggregated_results.items():
         title = prefix.strip('_')
         if not title:

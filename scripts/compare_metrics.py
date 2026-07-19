@@ -196,8 +196,7 @@ def main():
         
         # Fallbacks for synthetic runs
         if not os.path.exists(autonuma_before):
-            base_dir = os.path.basename(os.path.normpath(target_dir))
-            if base_dir == "results" or target_dir == ".":
+            if os.path.exists(os.path.join(target_dir, "autonuma_before.txt")):
                 autonuma_before = os.path.join(target_dir, "autonuma_before.txt")
                 autonuma_after = os.path.join(target_dir, "autonuma_after.txt")
         
@@ -219,8 +218,12 @@ def main():
                 print(f"- **Total Migrations**: {total_autonuma_mig:,}")
                 
                 # Try to parse execution time for autonuma
-                base_dir = os.path.basename(os.path.normpath(target_dir))
                 autonuma_stdout = os.path.join(target_dir, f"{prefix}autonuma_stdout.log")
+                if not os.path.exists(autonuma_stdout):
+                    if os.path.exists(os.path.join(target_dir, "autonuma_workload_stdout.log")):
+                        autonuma_stdout = os.path.join(target_dir, "autonuma_workload_stdout.log")
+                    elif os.path.exists(os.path.join(target_dir, "autonuma_stdout.log")):
+                        autonuma_stdout = os.path.join(target_dir, "autonuma_stdout.log")
                     
                 auto_time = None
                 if os.path.exists(autonuma_stdout):
