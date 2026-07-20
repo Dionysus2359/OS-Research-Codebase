@@ -227,6 +227,7 @@ int main(int argc, char* argv[]) {
         
         policy->execute(mgr);
         mgr.update_page_nodes();
+        mgr.calculate_misplaced_pages();
         
         cout << epoch << "," 
              << info.current_phase << ","

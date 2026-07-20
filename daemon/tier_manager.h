@@ -39,6 +39,7 @@ public:
     
     void detect_accesses(class EbpfSampler& sampler);
     void update_page_nodes();
+    void calculate_misplaced_pages();
     void migrate_pages(const std::vector<uintptr_t>& pages, int target_node);
     
     std::map<uintptr_t, PageMetadata>& get_metadata() { return pages_meta; }

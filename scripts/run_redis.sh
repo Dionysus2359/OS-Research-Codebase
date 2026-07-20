@@ -187,9 +187,8 @@ run_redis_autonuma() {
         fi
     fi
 
-    echo "[*] Starting Redis server on Node ${MEMBIND}..."
-    numactl --membind=${MEMBIND} --cpubind=0 \
-        redis-server --save "" --appendonly no --protected-mode no --port 6380 \
+    echo "[*] Starting Redis server on Node ${MEMBIND} (starting on CPU 1)..."
+    taskset -c 1 redis-server --save "" --appendonly no --protected-mode no --port 6380 \
         > "${RESULTS_DIR}/redis_server_autonuma.log" 2>&1 &
     REDIS_PID=$!
     sleep 2
@@ -206,6 +205,9 @@ run_redis_autonuma() {
         -p "redis.host=127.0.0.1" -p "redis.port=6380" \
         -p "recordcount=${RECORD_COUNT}" \
         > /dev/null 2>&1
+
+    # Dataset is fully loaded into Node 1! Yank Redis to Node 0!
+    taskset -a -pc 0 $REDIS_PID > /dev/null 2>&1 || true
 
     echo "[*] Running YCSB workload (${OPERATION_COUNT} operations)..."
     numactl --cpubind=0 \

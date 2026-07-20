@@ -109,11 +109,6 @@ void TierManager::detect_accesses(EbpfSampler& sampler) {
     }
 
     epoch_misplaced_pages = 0;
-    for (auto& [page_va, meta] : pages_meta) {
-        if (meta.current_node == 0 && !meta.accessed_this_epoch) {
-            epoch_misplaced_pages++;
-        }
-    }
 }
 
 void TierManager::update_page_nodes() {
@@ -134,12 +129,16 @@ void TierManager::update_page_nodes() {
     if (ret == 0) {
         fast_tier_count = 0;
         int i = 0;
-        for (auto& [page_va, meta] : pages_meta) {
+        for (auto it = pages_meta.begin(); it != pages_meta.end(); ) {
             if (status[i] >= 0) {
-                meta.current_node = status[i];
+                it->second.current_node = status[i];
                 if (status[i] == 0) fast_tier_count++;
+                ++it;
+            } else {
+                // Negative status = error for that page (e.g., unmapped/deleted by OS)
+                // Erase the dead page from tracking to prevent ghost page anomalies
+                it = pages_meta.erase(it);
             }
-            // Negative status = error for that page, keep previous value
             i++;
         }
     } else {
@@ -148,6 +147,15 @@ void TierManager::update_page_nodes() {
                  << ", errno=" << errno << ": " << strerror(errno) << ")" << endl;
         }
         // Keep previous fast_tier_count as-is
+    }
+}
+
+void TierManager::calculate_misplaced_pages() {
+    epoch_misplaced_pages = 0;
+    for (auto& [page_va, meta] : pages_meta) {
+        if (meta.current_node == 0 && !meta.accessed_this_epoch) {
+            epoch_misplaced_pages++;
+        }
     }
 }
 
@@ -170,7 +178,7 @@ void TierManager::migrate_pages(const vector<uintptr_t>& pages, int target_node)
     // Count only pages that actually succeeded
     int succeeded = 0;
     for (size_t i = 0; i < pages.size(); ++i) {
-        if (status[i] == target_node || status[i] >= 0) {
+        if (status[i] == target_node) {
             pages_meta[pages[i]].current_node = target_node;
             pages_meta[pages[i]].migration_history++;
             succeeded++;

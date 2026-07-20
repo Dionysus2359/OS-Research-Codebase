@@ -63,6 +63,7 @@ run_gapbs_kernel() {
     MEMBIND=1
     TRIALS=5
     FTC=128
+    DAEMON_ARGS=("--slow-node" "$MEMBIND" "--fast-tier-capacity" "$FTC" "--max-promotions" "256" "--max-demotions" "256")
     if [ "$SCALE" -ge 23 ]; then
         if numactl -H | grep -q "node 2"; then
             MEMBIND=2
@@ -184,10 +185,24 @@ run_gapbs_autonuma() {
     cat /proc/vmstat | grep numa > "$RESULTS_DIR/${KERNEL}_autonuma_vmstat_before.txt"
     numastat > "$RESULTS_DIR/${KERNEL}_autonuma_numastat_before.txt"
 
-    # Start GAPBS workload WITHOUT daemon
-    /usr/bin/time -v numactl --membind=${MEMBIND} --cpubind=0 \
-        "$GAPBS_DIR/$KERNEL" -g "$SCALE" -n "$TRIALS" \
-        > "$LOG_FILE" 2>&1
+    # Start GAPBS workload WITHOUT daemon (start on Node 1 CPU)
+    taskset -c 1 /usr/bin/time -v "$GAPBS_DIR/$KERNEL" -g "$SCALE" -n "$TRIALS" \
+        > "$LOG_FILE" 2>&1 &
+    GAPBS_PID=$!
+    
+    # Wait for graph building to occur locally on Node 1
+    # GAPBS prints 'Graph has X nodes...' exactly when loading finishes
+    while ! grep -q "Graph has" "$LOG_FILE" 2>/dev/null; do
+        if ! kill -0 $GAPBS_PID 2>/dev/null; then
+            break
+        fi
+        sleep 0.1
+    done
+    
+    # Yank CPU affinity back to Node 0 for actual graph traversal trials!
+    taskset -a -pc 0 $GAPBS_PID > /dev/null 2>&1 || true
+    
+    wait $GAPBS_PID 2>/dev/null || true
 
     echo "[*] Workload finished. Waiting for kernel AutoNUMA threads to flush..."
     sleep 2

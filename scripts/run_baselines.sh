@@ -80,9 +80,21 @@ run_autonuma_baseline() {
     cat /proc/vmstat | grep numa > "$RESULTS_DIR/autonuma_before.txt"
     numastat > "$RESULTS_DIR/autonuma_numastat_before.txt"
     
-    # Run workload locally WITHOUT daemon
-    numactl --membind=1 --cpubind=0 "$WORKLOAD_DIR/workload" \
-        > "$RESULTS_DIR/autonuma_workload_stdout.log"
+    # Run workload locally WITHOUT daemon (start on Node 1 CPU)
+    taskset -c 1 "$WORKLOAD_DIR/workload" \
+        > "$RESULTS_DIR/autonuma_workload_stdout.log" &
+    WORKLOAD_PID=$!
+    
+    # Wait for memory initialization to complete
+    for i in $(seq 1 20); do
+        [ -f /tmp/workload_info ] && break
+        sleep 0.25
+    done
+    
+    # Instantly yank CPU affinity back to Node 0
+    taskset -a -pc 0 $WORKLOAD_PID > /dev/null
+    
+    wait $WORKLOAD_PID 2>/dev/null || true
     
     echo "[*] Workload finished. Waiting for kernel AutoNUMA threads to flush..."
     sleep 2

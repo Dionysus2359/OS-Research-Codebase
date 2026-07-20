@@ -187,6 +187,9 @@ def main():
                                     if "redis" in target_dir.lower():
                                         m = re.search(r'\[OVERALL\], RunTime\(ms\), ([\d\.]+)', content)
                                         if m: auto_res['app_time'] = float(m.group(1)) / 1000.0
+                                    elif "gapbs" in target_dir.lower():
+                                        m = re.search(r'Average Time:\s+([\d\.]+)', content)
+                                        if m: auto_res['app_time'] = float(m.group(1))
                                     else:
                                         m = re.search(r'User: ([\d\.]+)', content)
                                         if m: auto_res['app_time'] = float(m.group(1))
