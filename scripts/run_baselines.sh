@@ -51,8 +51,12 @@ run_daemon_baseline() {
     done
 
     # Start daemon with workload PID
-    sudo "$DAEMON_DIR/daemon" "$POLICY" --pid "$WORKLOAD_PID" \
-        --slow-node 1 --fast-tier-capacity 410 --max-promotions 256 --max-demotions 256 \
+    DAEMON_ARGS=("--slow-node" "1" "--fast-tier-capacity" "410" "--max-promotions" "256" "--max-demotions" "256")
+    if [ "$TRACE_MODE" == "true" ]; then
+        DAEMON_ARGS+=("--trace" "--trace-dir" "${PROJECT_ROOT}/ml/traces")
+    fi
+
+    sudo "$DAEMON_DIR/daemon" "$POLICY" --pid "$WORKLOAD_PID" "${DAEMON_ARGS[@]}" \
         > "$RESULTS_DIR/${POLICY}_summary.csv" \
         2> "$RESULTS_DIR/${POLICY}_stderr.log" &
     DAEMON_PID=$!
@@ -114,19 +118,42 @@ make -C "$DAEMON_DIR" clean && make -C "$DAEMON_DIR"
 
 sudo mkdir -p /root/results
 
+TRACE_MODE=false
+ML_ONLY=false
+while [ $# -gt 0 ]; do
+    case "$1" in
+        --trace) TRACE_MODE=true; mkdir -p "${PROJECT_ROOT}/ml/traces" ;;
+        --ml-only) ML_ONLY=true ;;
+    esac
+    shift
+done
+
 # ---- Execute Baselines ----
-for RUN in {1..3}; do
+NUM_RUNS=3
+if [ "$TRACE_MODE" == "true" ]; then
+    NUM_RUNS=1
+elif [ "$ML_ONLY" == "true" ]; then
+    NUM_RUNS=3
+fi
+
+for RUN in $(seq 1 $NUM_RUNS); do
     echo "=================================================="
     echo "Starting Run $RUN..."
     echo "=================================================="
     RESULTS_DIR="${RESULTS_BASE}/run_${RUN}"
     mkdir -p "$RESULTS_DIR"
 
-    run_daemon_baseline "lru"
-    run_daemon_baseline "lfu"
-    run_daemon_baseline "decaying_lfu"
-    run_autonuma_baseline
-    run_daemon_baseline "ml"
+    if [ "$TRACE_MODE" == "true" ]; then
+        run_daemon_baseline "random"
+    elif [ "$ML_ONLY" == "true" ]; then
+        run_daemon_baseline "ml"
+    else
+        run_daemon_baseline "lru"
+        run_daemon_baseline "lfu"
+        run_daemon_baseline "decaying_lfu"
+        run_autonuma_baseline
+        run_daemon_baseline "ml"
+    fi
 done
 
 echo "=================================================="

@@ -221,12 +221,16 @@ POLICIES=("lru" "lfu" "decaying_lfu" "ml")
 
 if [ "$TRACE_MODE" == "true" ]; then
     POLICIES=("random")
+    NUM_RUNS=1
 elif [ "$ML_ONLY" == "true" ]; then
     POLICIES=("ml")
+    NUM_RUNS=3
+else
+    NUM_RUNS=3
 fi
 
 # Run workloads
-for RUN in {1..3}; do
+for RUN in $(seq 1 $NUM_RUNS); do
     echo "=================================================="
     echo "Starting Run $RUN..."
     echo "=================================================="
