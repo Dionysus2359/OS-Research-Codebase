@@ -7,7 +7,7 @@ from sklearn.metrics import f1_score, balanced_accuracy_score, classification_re
 import os
 
 traces = {
-    'synthetic': 'trace_random.csv',
+    'synthetic': 'traces/trace_random.csv',
     'bfs':       'traces/trace_random_bfs.csv',
     'pagerank':  'traces/trace_random_pr.csv',
     'redis':     'traces/trace_random_redis.csv'
