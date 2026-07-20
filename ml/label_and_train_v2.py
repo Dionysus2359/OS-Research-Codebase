@@ -78,16 +78,25 @@ FEATURE_COLS = [
 
 df_all["access_count"] = np.log1p(df_all["access_count"])
 
-print("Labeling data (Optimized)...")
+print("Downsampling data before labeling to prevent OOM...")
+MAX_SAMPLES = 330000
 
-print("  Building O(1) access dictionary...")
-# Build access dictionary from df_all so lookaheads can cross phase boundaries if needed
-access_dict = {(r.workload, r.epoch, r.page_va): int(r.accessed) for r in df_all.itertuples(index=False)}
+balanced_dfs = []
+for w in df_filtered['workload'].unique():
+    df_w = df_filtered[df_filtered['workload'] == w]
+    if len(df_w) > MAX_SAMPLES:
+        print(f"  Downsampling {w} from {len(df_w)} to {MAX_SAMPLES}")
+        df_w = df_w.sample(n=MAX_SAMPLES, random_state=42)
+    balanced_dfs.append(df_w)
 
+df_filtered_sampled = pd.concat(balanced_dfs, ignore_index=True)
+
+print("Labeling downsampled data...")
 records = []
-total_rows = len(df_filtered)
-for i, row in enumerate(df_filtered.itertuples(index=False)):
-    if i % 1000000 == 0 and i > 0:
+total_rows = len(df_filtered_sampled)
+
+for i, row in enumerate(df_filtered_sampled.itertuples(index=False)):
+    if i % 100000 == 0 and i > 0:
         print(f"  Processed {i}/{total_rows} rows...")
         
     workload = row.workload
@@ -97,11 +106,18 @@ for i, row in enumerate(df_filtered.itertuples(index=False)):
     
     lookahead_k, threshold = get_label_params(workload)
     
-    # Guard against phase boundary crossing
     if epoch + lookahead_k > phase_max_epoch[(workload, phase_at_T)]:
         continue
         
-    count = sum(access_dict.get((workload, epoch + k, page_va), 0) for k in range(1, lookahead_k + 1))
+    count = 0
+    for k in range(1, lookahead_k + 1):
+        target_epoch = epoch + k
+        try:
+            future_row = df_lookup.loc[(workload, target_epoch, page_va)]
+            count += int(future_row["accessed"])
+        except KeyError:
+            pass
+            
     label = 1 if count >= threshold else 0
     
     records.append({
@@ -116,20 +132,7 @@ for i, row in enumerate(df_filtered.itertuples(index=False)):
     })
 
 df_labeled = pd.DataFrame(records)
-
-print("\nBalancing workload datasets...")
-MAX_SAMPLES = 330000
-
-balanced_dfs = []
-for w in df_labeled['workload'].unique():
-    df_w = df_labeled[df_labeled['workload'] == w]
-    if len(df_w) > MAX_SAMPLES:
-        print(f"  Downsampling {w} from {len(df_w)} to {MAX_SAMPLES}")
-        df_w = df_w.sample(n=MAX_SAMPLES, random_state=42)
-    balanced_dfs.append(df_w)
-
-df_labeled = pd.concat(balanced_dfs, ignore_index=True)
-print(f"\nTotal labeled samples (after balancing): {len(df_labeled)}")
+print(f"\nTotal labeled samples: {len(df_labeled)}")
 for wl in df_labeled['workload'].unique():
     subset = df_labeled[df_labeled['workload'] == wl]
     print(f"  {wl}: {len(subset)} samples ({np.mean(subset['label']):.3f} positive rate)")
