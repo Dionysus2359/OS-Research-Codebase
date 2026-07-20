@@ -78,37 +78,42 @@ FEATURE_COLS = [
 
 df_all["access_count"] = np.log1p(df_all["access_count"])
 
-print("Labeling data...")
+print("Labeling data (Optimized)...")
+
+print("  Building O(1) access dictionary...")
+# Build access dictionary from df_all so lookaheads can cross phase boundaries if needed
+access_dict = {(r.workload, r.epoch, r.page_va): int(r.accessed) for r in df_all.itertuples(index=False)}
+
 records = []
-for workload in df_filtered['workload'].unique():
-    df_wl = df_filtered[df_filtered['workload'] == workload]
-    epochs_in_scope = df_wl["epoch"].unique()
-    pages_in_scope = df_wl["page_va"].unique()
+total_rows = len(df_filtered)
+for i, row in enumerate(df_filtered.itertuples(index=False)):
+    if i % 1000000 == 0 and i > 0:
+        print(f"  Processed {i}/{total_rows} rows...")
+        
+    workload = row.workload
+    epoch = row.epoch
+    page_va = row.page_va
+    phase_at_T = row.phase
     
-    print(f"  Processing {workload}: {len(epochs_in_scope)} epochs, {len(pages_in_scope)} pages")
+    lookahead_k, threshold = get_label_params(workload)
     
-    for epoch in epochs_in_scope:
-        for page_va in pages_in_scope:
-            try:
-                row = df_lookup.loc[(workload, epoch, page_va)]
-            except KeyError:
-                continue
-
-            phase_at_T = row["phase"]
-            label = label_page(workload, epoch, page_va, phase_at_T)
-            if label is None:
-                continue  
-
-            records.append({
-                "workload": workload,
-                "access_count": row["access_count"],
-                "smooth_frequency": row["smooth_frequency"],
-                "momentum": row["momentum"],
-                "hot_ratio": row["hot_ratio"],
-                "access_frequency_ratio": row["access_frequency_ratio"],
-                "aci": row["aci"],
-                "label": label,
-            })
+    # Guard against phase boundary crossing
+    if epoch + lookahead_k > phase_max_epoch[(workload, phase_at_T)]:
+        continue
+        
+    count = sum(access_dict.get((workload, epoch + k, page_va), 0) for k in range(1, lookahead_k + 1))
+    label = 1 if count >= threshold else 0
+    
+    records.append({
+        "workload": workload,
+        "access_count": row.access_count,
+        "smooth_frequency": row.smooth_frequency,
+        "momentum": row.momentum,
+        "hot_ratio": row.hot_ratio,
+        "access_frequency_ratio": row.access_frequency_ratio,
+        "aci": row.aci,
+        "label": label,
+    })
 
 df_labeled = pd.DataFrame(records)
 
