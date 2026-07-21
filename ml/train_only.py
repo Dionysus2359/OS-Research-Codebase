@@ -33,7 +33,7 @@ def train_and_eval(train_df, test_df, name):
     X_te_sc = scaler.transform(X_te)
     
     # YOU CAN CHANGE REGULARIZATION (C) HERE!
-    model = LogisticRegression(class_weight='balanced', max_iter=1000, C=1.0)
+    model = LogisticRegression(C=0.01, class_weight='balanced', max_iter=2000)
     model.fit(X_tr_sc, y_tr)
     
     preds = model.predict(X_te_sc)
