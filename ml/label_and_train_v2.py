@@ -137,6 +137,14 @@ for wl in df_labeled['workload'].unique():
     subset = df_labeled[df_labeled['workload'] == wl]
     print(f"  {wl}: {len(subset)} samples ({np.mean(subset['label']):.3f} positive rate)")
 
+print("\n--- Feature Correlation Matrix ---")
+print(df_labeled[FEATURE_COLS + ["label"]].corr())
+
+import sys
+if "--corr-only" in sys.argv:
+    print("\nExiting early (correlation check only).")
+    sys.exit(0)
+
 
 def train_and_eval(train_df, test_df, name):
     X_tr = train_df[FEATURE_COLS].values
