@@ -11,7 +11,7 @@ FEATURE_COLS = [
     "access_count",
     "momentum",
     "access_frequency_ratio",
-    # "smooth_frequency",
+    "smooth_frequency",
     # "aci"
 ]
 
