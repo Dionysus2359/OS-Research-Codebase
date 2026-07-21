@@ -46,8 +46,9 @@ for name, path in traces.items():
     else:
         df_filtered = df_wl.copy()
         
-    print("  Building indices for lookup...")
-    df_lookup = df_wl.set_index(["epoch", "page_va"]).sort_index()
+    print("  Building O(1) dictionary for ultra-fast lookup...")
+    # zip is executed in C, creating the dictionary instantly without pandas overhead
+    access_dict = dict(zip(zip(df_wl['epoch'], df_wl['page_va']), df_wl['accessed']))
     phase_max_epoch = df_wl.groupby("phase")["epoch"].max().to_dict()
     
     df_filtered["access_count"] = np.log1p(df_filtered["access_count"])
@@ -71,12 +72,7 @@ for name, path in traces.items():
             
         count = 0
         for k in range(1, lookahead_k + 1):
-            target_epoch = epoch + k
-            try:
-                future_row = df_lookup.loc[(target_epoch, page_va)]
-                count += int(future_row["accessed"])
-            except KeyError:
-                pass
+            count += access_dict.get((epoch + k, page_va), 0)
                 
         label = 1 if count >= threshold else 0
         
@@ -110,7 +106,7 @@ for name, path in traces.items():
     
     all_balanced_dfs.append(df_balanced)
     
-    del df_wl, df_filtered, df_lookup, records, df_labeled_wl, df_pos, df_neg, df_balanced, df_neg_sampled
+    del df_wl, df_filtered, access_dict, records, df_labeled_wl, df_pos, df_neg, df_balanced, df_neg_sampled
 
 if not all_balanced_dfs:
     print("No traces processed. Exiting.")
@@ -118,6 +114,8 @@ if not all_balanced_dfs:
 
 df_labeled = pd.concat(all_balanced_dfs, ignore_index=True)
 print(f"\nTotal labeled samples across all workloads: {len(df_labeled)}")
+df_labeled.to_csv("labeled_dataset.csv", index=False)
+print("Saved fully labeled and balanced dataset to 'labeled_dataset.csv'")
 
 print("\n--- Feature Correlation Matrix ---")
 print(df_labeled[FEATURE_COLS + ["label"]].corr())
