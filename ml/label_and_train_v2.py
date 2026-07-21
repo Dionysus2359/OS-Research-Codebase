@@ -79,8 +79,11 @@ for name, path in traces.items():
         records.append({
             "workload": name,
             "access_count": row.access_count,
+            "smooth_frequency": row.smooth_frequency,
             "momentum": row.momentum,
+            "hot_ratio": row.hot_ratio,
             "access_frequency_ratio": row.access_frequency_ratio,
+            "aci": row.aci,
             "label": label,
         })
         
