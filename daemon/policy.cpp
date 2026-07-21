@@ -113,11 +113,8 @@ double MLPolicy::score_page(const PageMetadata& meta) const {
     // and the comment in ml_weights.h
     double features[] = {
         log1p((double)meta.access_count), // index 0
-        meta.smooth_frequency,            // index 1
-        meta.momentum,                    // index 2
-        meta.hot_ratio,                   // index 3
-        meta.access_frequency_ratio,      // index 4
-        meta.aci                          // index 5
+        meta.momentum,                    // index 1
+        meta.access_frequency_ratio       // index 2
     };
     
     double dot = ML_BIAS;
