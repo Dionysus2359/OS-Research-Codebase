@@ -126,17 +126,26 @@ void TierManager::update_page_nodes() {
     long ret = move_pages(target_pid, addrs.size(), 
                           const_cast<void**>(addrs.data()), NULL, status.data(), 0);
     
+// TODO: Tune this threshold based on measure_gaps.py results
+constexpr int COLD_PURGE_THRESHOLD = 50;
+
     if (ret == 0) {
         fast_tier_count = 0;
         int i = 0;
         for (auto it = pages_meta.begin(); it != pages_meta.end(); ) {
             if (status[i] >= 0) {
                 it->second.current_node = status[i];
-                if (status[i] == 0) fast_tier_count++;
-                ++it;
+                if (status[i] == 0) {
+                    fast_tier_count++;
+                    ++it;
+                } else if (it->second.epochs_since_access > COLD_PURGE_THRESHOLD) {
+                    it = pages_meta.erase(it);   // safe: confirmed slow-tier, never touches fast_tier_count
+                    i++;
+                    continue;
+                } else {
+                    ++it;
+                }
             } else {
-                // Negative status = error for that page (e.g., unmapped/deleted by OS)
-                // Erase the dead page from tracking to prevent ghost page anomalies
                 it = pages_meta.erase(it);
             }
             i++;

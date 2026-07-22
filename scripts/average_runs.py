@@ -210,8 +210,8 @@ def main():
         print("=" * 100)
         
         print(f"\n### Absolute Metrics (Mean ± StdDev)")
-        print(f"| {'Policy':<12} | {'App Time (s)':>19} | {'Hit Ratio (%)':>15} | {'Avg Lat (ns)':>19} | {'CXL Lat (ns)':>19} | {'Total Migrations':>20} | {'Overhead (us)':>15} |")
-        print(f"|{'-'*14}|{'-'*21}|{'-'*17}|{'-'*21}|{'-'*21}|{'-'*22}|{'-'*17}|")
+        print(f"| {'Policy':<12} | {'App Time (s)':>19} | {'Hit Ratio (%)':>15} | {'Misplaced (%)':>15} | {'Avg Lat (ns)':>19} | {'CXL Lat (ns)':>19} | {'Total Migrations':>20} | {'Mig Cost (ms)':>15} | {'Overhead (us)':>15} |")
+        print(f"|{'-'*14}|{'-'*21}|{'-'*17}|{'-'*17}|{'-'*21}|{'-'*21}|{'-'*22}|{'-'*17}|{'-'*17}|")
         
         for p in policies:
             if p in policy_runs:
@@ -249,12 +249,14 @@ def main():
 
                 app_time = calc_stat('app_time')
                 hit_ratio = calc_stat_pct('hit_ratio')
+                misplaced = calc_stat_pct('misplacement_ratio')
                 avg_lat = calc_stat('avg_latency')
                 cxl_lat = calc_stat('cxl_latency')
                 migs = calc_stat_int('total_migrations')
+                mig_cost = calc_stat('total_migration_cost')
                 ov = calc_stat_int('overhead_us')
                 
-                print(f"| {p:<12} | {app_time:>19} | {hit_ratio:>15} | {avg_lat:>19} | {cxl_lat:>19} | {migs:>20} | {ov:>15} |")
+                print(f"| {p:<12} | {app_time:>19} | {hit_ratio:>15} | {misplaced:>15} | {avg_lat:>19} | {cxl_lat:>19} | {migs:>20} | {mig_cost:>15} | {ov:>15} |")
                 
 if __name__ == '__main__':
     main()

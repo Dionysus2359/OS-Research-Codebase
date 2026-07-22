@@ -84,6 +84,7 @@ for name, path in traces.items():
             "hot_ratio": row.hot_ratio,
             "access_frequency_ratio": row.access_frequency_ratio,
             "aci": row.aci,
+            "epochs_since_access": row.epochs_since_access,
             "label": label,
         })
         
