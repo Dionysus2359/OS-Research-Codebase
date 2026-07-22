@@ -23,7 +23,7 @@ class CUSUMDetector {
   double stable_demote = 0.40;
 
   static constexpr double REACT_ABS_THRESHOLD = 0.10;
-  double stable_abs_threshold = 0.30;
+  double stable_abs_threshold = 0.72;
 
 public:
   CUSUMDetector() = default;
