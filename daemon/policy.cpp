@@ -112,9 +112,10 @@ double MLPolicy::score_page(const PageMetadata& meta) const {
     // Feature order MUST match FEATURE_COLS in label_and_train.py
     // and the comment in ml_weights.h
     double features[] = {
-        log1p((double)meta.access_count), // index 0
-        meta.momentum,                    // index 1
-        meta.access_frequency_ratio       // index 2
+        log1p((double)meta.access_count),
+        meta.momentum,
+        meta.access_frequency_ratio,
+        (double)meta.epochs_since_access
     };
     
     double dot = ML_BIAS;

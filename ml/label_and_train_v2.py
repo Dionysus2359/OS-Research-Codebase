@@ -22,9 +22,10 @@ def get_label_params(workload_name):
         return 10, 4 # Standard for PR and Synthetic
 
 FEATURE_COLS = [
-    "access_count",
-    "momentum",
-    "access_frequency_ratio"
+    "access_count", 
+    "momentum", 
+    "access_frequency_ratio",
+    "epochs_since_access"
 ]
 
 all_balanced_dfs = []
