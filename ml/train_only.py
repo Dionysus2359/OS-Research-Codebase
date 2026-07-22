@@ -24,6 +24,9 @@ if not os.path.exists("labeled_dataset.csv"):
 
 df_labeled = pd.read_csv("labeled_dataset.csv")
 
+print("\n--- Feature Correlation Matrix ---")
+print(df_labeled[FEATURE_COLS + ["label"]].corr())
+
 def train_and_eval(train_df, test_df, name):
     X_tr = train_df[FEATURE_COLS].values
     y_tr = train_df["label"].values
