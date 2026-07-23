@@ -43,31 +43,23 @@ for PAIR in "${MARGIN_PAIRS[@]}"; do
     sudo sed -i 's/NUM_RUNS=3/NUM_RUNS=1/g' "${SCRIPT_DIR}/run_redis.sh"
     sudo "${SCRIPT_DIR}/run_redis.sh" 1 --ml-only
     sudo sed -i 's/NUM_RUNS=1/NUM_RUNS=3/g' "${SCRIPT_DIR}/run_redis.sh"
+    # 3. Extract the metrics using compare_metrics.py
+    # compare_metrics parses the entire workload lifespan properly
+    python3 "${SCRIPT_DIR}/compare_metrics.py" "${PROJECT_ROOT}/results/redis/run_1" > "${RESULTS_DIR}/compare_${PROMOTE}_${DEMOTE}.txt"
     
-    # 3. Extract the metrics from the generated CSV
-    # run_redis.sh outputs to results/redis/run_1/redis_ml_summary.csv
-    SUMMARY_CSV="${PROJECT_ROOT}/results/redis/run_1/redis_ml_summary.csv"
-    STDERR_LOG="${PROJECT_ROOT}/results/redis/run_1/redis_ml_stderr.log"
+    # Grab the line starting with "| ml" from the markdown table
+    ML_LINE=$(grep "^| ml" "${RESULTS_DIR}/compare_${PROMOTE}_${DEMOTE}.txt" | tr -s ' ' || true)
     
-    # Copy files to our sweep folder so they don't get overwritten
-    cp "$SUMMARY_CSV" "${RESULTS_DIR}/summary_${PROMOTE}_${DEMOTE}.csv" 2>/dev/null || true
-    cp "$STDERR_LOG" "${RESULTS_DIR}/stderr_${PROMOTE}_${DEMOTE}.log" 2>/dev/null || true
-    
-    # Parse the metrics using compare_metrics.py to grab App Time and other stats
-    echo "Extracting metrics..."
-    # We can just extract the last line of the CSV directly for our summary table
-    if [ -f "$SUMMARY_CSV" ]; then
-        LAST_LINE=$(tail -n 1 "$SUMMARY_CSV")
-        # CSV format: epoch,phase,accesses,hits,hit_rate,fast_tier,tracked,migrations,proms,dems,mig_latency,est_lat,cxl_lat,misplaced,overhead,app_time
-        HIT_RATE=$(echo "$LAST_LINE" | cut -d',' -f5)
-        MIGS=$(echo "$LAST_LINE" | cut -d',' -f8)
-        OVERHEAD=$(echo "$LAST_LINE" | cut -d',' -f15)
-        APP_TIME=$(echo "$LAST_LINE" | cut -d',' -f16)
-        
-        # Multiply Hit Rate by 100 for readability
-        HIT_PCT=$(printf "%.2f%%" $(echo "$HIT_RATE * 100" | bc -l))
+    if [ ! -z "$ML_LINE" ]; then
+        # Example format: | ml | 120.4560 | 98.55% | 8.34% | 90.10 | ...
+        APP_TIME=$(echo "$ML_LINE" | cut -d'|' -f3 | xargs)
+        HIT_PCT=$(echo "$ML_LINE" | cut -d'|' -f4 | xargs)
+        MIGS=$(echo "$ML_LINE" | cut -d'|' -f8 | xargs)
+        OVERHEAD=$(echo "$ML_LINE" | cut -d'|' -f12 | xargs)
         
         printf "%-7s | %-6s | %-12s | %-8s | %-16s | %s\n" "$PROMOTE" "$DEMOTE" "$APP_TIME" "$HIT_PCT" "$MIGS" "$OVERHEAD" >> "$SUMMARY_FILE"
+    else
+        printf "%-7s | %-6s | %-12s | %-8s | %-16s | %s\n" "$PROMOTE" "$DEMOTE" "ERR" "ERR" "ERR" "ERR" >> "$SUMMARY_FILE"
     fi
 done
 
