@@ -22,7 +22,7 @@ class CUSUMDetector {
   double stable_promote = 0.20;
   double stable_demote = 0.40;
 
-  static constexpr double REACT_ABS_THRESHOLD = 0.10;
+  static constexpr double REACT_ABS_THRESHOLD = 0.587;
   double stable_abs_threshold = 0.921;
 
 public:
