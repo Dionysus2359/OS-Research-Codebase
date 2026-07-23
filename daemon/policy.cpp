@@ -196,11 +196,16 @@ void MLPolicy::execute(TierManager& mgr) {
     const double DEMOTE_MARGIN  = cusum.get_demote_margin();
     const double ABS_THRESHOLD  = cusum.get_absolute_threshold();
 
+    // When FTC has room, fill aggressively (95% recall).
+    // When FTC is full, use CUSUM-driven threshold for conservative swaps.
+    static constexpr double FILL_THRESHOLD = 0.370;
+
     for (size_t i = 0; i < slow_candidates.size()
          && (int)to_promote.size() < MAX_PROMOTIONS_PER_EPOCH;  // batch cap
          ++i) {
         
-        if (slow_candidates[i].score < ABS_THRESHOLD) continue;
+        double effective_threshold = (free_fast_slots > 0) ? FILL_THRESHOLD : ABS_THRESHOLD;
+        if (slow_candidates[i].score < effective_threshold) continue;
         
         if (free_fast_slots > 0) {
             to_promote.push_back(slow_candidates[i].page_va);

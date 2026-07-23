@@ -77,7 +77,7 @@ run_gapbs_kernel() {
             TRIALS=250
             FTC=786432
         else
-            TRIALS=1000
+            TRIALS=3000
             FTC=786432
         fi
         
