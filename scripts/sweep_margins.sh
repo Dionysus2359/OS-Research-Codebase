@@ -40,12 +40,14 @@ for PAIR in "${MARGIN_PAIRS[@]}"; do
     
     # 2. Run the reduced Redis benchmark (Scale 1 = ~2 minutes).
     # run_redis.sh automatically runs 'make clean && make' so we don't need to do it here.
+    sudo sed -i 's/NUM_RUNS=3/NUM_RUNS=1/g' "${SCRIPT_DIR}/run_redis.sh"
     sudo "${SCRIPT_DIR}/run_redis.sh" 1 --ml-only
+    sudo sed -i 's/NUM_RUNS=1/NUM_RUNS=3/g' "${SCRIPT_DIR}/run_redis.sh"
     
     # 3. Extract the metrics from the generated CSV
-    # run_redis.sh outputs to results/redis/redis_ml_summary.csv
-    SUMMARY_CSV="${PROJECT_ROOT}/results/redis/redis_ml_summary.csv"
-    STDERR_LOG="${PROJECT_ROOT}/results/redis/redis_ml_stderr.log"
+    # run_redis.sh outputs to results/redis/run_1/redis_ml_summary.csv
+    SUMMARY_CSV="${PROJECT_ROOT}/results/redis/run_1/redis_ml_summary.csv"
+    STDERR_LOG="${PROJECT_ROOT}/results/redis/run_1/redis_ml_stderr.log"
     
     # Copy files to our sweep folder so they don't get overwritten
     cp "$SUMMARY_CSV" "${RESULTS_DIR}/summary_${PROMOTE}_${DEMOTE}.csv" 2>/dev/null || true
