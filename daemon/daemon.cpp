@@ -10,6 +10,7 @@
 
 #include <sys/types.h>
 #include <signal.h>
+#include <cerrno>
 
 using namespace std;
 using namespace std::chrono;
@@ -164,6 +165,11 @@ int main(int argc, char* argv[]) {
     while (keep_running) {
         auto epoch_start = high_resolution_clock::now();
 
+        if (kill(info.pid, 0) != 0 && errno == ESRCH) {
+            cerr << "[Daemon] Workload PID " << info.pid << " exited. Stopping." << endl;
+            break;
+        }
+
         read_workload_info(info);
         // Only check phase for exit — guest PID doesn't exist on host
         if (info.current_phase < 0) {
@@ -229,6 +235,9 @@ int main(int argc, char* argv[]) {
         mgr.update_page_nodes();
         mgr.calculate_misplaced_pages();
         
+        auto epoch_end = high_resolution_clock::now();
+        double epoch_ms = duration<double, std::milli>(epoch_end - epoch_start).count();
+
         cout << epoch << "," 
              << info.current_phase << ","
              << mgr.epoch_accesses << ","
@@ -242,7 +251,8 @@ int main(int argc, char* argv[]) {
              << mgr.total_migration_latency_ms << ","
              << est_latency_ns << ","
              << cxl_latency_ns << ","
-             << mgr.epoch_misplaced_pages << endl;
+             << mgr.epoch_misplaced_pages << ","
+             << epoch_ms << endl;
         
         cerr << "E" << epoch 
              << " P" << info.current_phase
@@ -252,16 +262,15 @@ int main(int argc, char* argv[]) {
              << " | Mig: +" << mgr.epoch_promotions << "/-" << mgr.epoch_demotions
              << " (total=" << mgr.total_migrations << ")"
              << " | Est.Lat: " << est_latency_ns << "ns"
-             << " | Cost: " << mgr.total_migration_latency_ms << "ms" << endl;
+             << " | Cost: " << mgr.total_migration_latency_ms << "ms" 
+             << " | EpochMs: " << epoch_ms << "ms" << endl;
 
         epoch++;
         
-        auto epoch_end = high_resolution_clock::now();
-        double epoch_ms = duration<double, std::milli>(epoch_end - epoch_start).count();
         if (epoch_ms < 100.0) {
             usleep((int)((100.0 - epoch_ms) * 1000));
         } else {
-            cerr << "[Daemon] WARNING: Epoch " << epoch 
+            cerr << "[Daemon] WARNING: Epoch " << epoch - 1
                  << " took " << epoch_ms << "ms (over budget)" << endl;
         }
     }

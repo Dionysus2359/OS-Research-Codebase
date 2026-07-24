@@ -64,24 +64,39 @@ run_gapbs_kernel() {
     TRIALS=5
     FTC=128
     DAEMON_ARGS=("--slow-node" "$MEMBIND" "--fast-tier-capacity" "$FTC" "--max-promotions" "256" "--max-demotions" "256")
-    if [ "$SCALE" -ge 23 ]; then
+    if [ "$SCALE" -ge 27 ]; then
+        if numactl -H | grep -q "node 2"; then
+            MEMBIND=2
+        else
+            echo "[WARN] Scale >= 27 but Node 2 not found! Falling back to Node 1."
+            MEMBIND=1
+        fi
+        # Scale-27: ~20GB graph, 20% FTC = 948,000 pages
+        if [ "$KERNEL" == "pr" ]; then
+            TRIALS=250
+            FTC=948000
+        else
+            TRIALS=1000
+            FTC=948000
+        fi
+        DAEMON_ARGS=("--slow-node" "$MEMBIND" "--fast-tier-capacity" "$FTC" "--max-promotions" "1024" "--max-demotions" "1024")
+    elif [ "$SCALE" -ge 23 ]; then
         if numactl -H | grep -q "node 2"; then
             MEMBIND=2
         else
             echo "[WARN] Scale >= 23 but Node 2 not found! Falling back to Node 1."
             MEMBIND=1
         fi
-        # TRIALS=64
-        # Dynamic Capacity: Give BFS room to breathe, keep PR under the hardware limit
+        # Scale-25: ~5GB graph, 20% FTC = 237000 pages
         if [ "$KERNEL" == "pr" ]; then
             TRIALS=250
-            FTC=786432
+            FTC=237000
         else
             TRIALS=3000
-            FTC=786432
+            FTC=237000
         fi
         
-        DAEMON_ARGS=("--slow-node" "$MEMBIND" "--fast-tier-capacity" "$FTC" "--max-promotions" "4096" "--max-demotions" "4096")
+        DAEMON_ARGS=("--slow-node" "$MEMBIND" "--fast-tier-capacity" "$FTC" "--max-promotions" "1024" "--max-demotions" "1024")
     elif [ "$SCALE" -le 20 ]; then
         TRIALS=300
         # Change FTC from 128 to 2000 (roughly 8MB, allowing a realistic swap space for a tiny graph)
@@ -165,7 +180,19 @@ run_gapbs_autonuma() {
     
     MEMBIND=1
     TRIALS=5
-    if [ "$SCALE" -ge 23 ]; then
+    if [ "$SCALE" -ge 27 ]; then
+        if numactl -H | grep -q "node 2"; then
+            MEMBIND=2
+        else
+            echo "[WARN] Scale >= 27 but Node 2 not found! Falling back to Node 1."
+            MEMBIND=1
+        fi
+        if [ "$KERNEL" == "pr" ]; then
+            TRIALS=250
+        else
+            TRIALS=1000
+        fi
+    elif [ "$SCALE" -ge 23 ]; then
         if numactl -H | grep -q "node 2"; then
             MEMBIND=2
         else
@@ -176,7 +203,7 @@ run_gapbs_autonuma() {
         if [ "$KERNEL" == "pr" ]; then
             TRIALS=250
         else
-            TRIALS=1000
+            TRIALS=3000
         fi
     elif [ "$SCALE" -le 20 ]; then
         TRIALS=300
