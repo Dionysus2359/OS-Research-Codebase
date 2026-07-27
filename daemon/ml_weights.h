@@ -3,9 +3,8 @@
 // Feature order: access_count, momentum, access_frequency_ratio, epochs_since_access
 constexpr int ML_NUM_FEATURES = 4;
 
-constexpr double ML_WEIGHTS[ML_NUM_FEATURES] = {3.6964, -0.0859, 0.4642, -13.0214};
-constexpr double ML_BIAS = -4.1802;
+constexpr double ML_WEIGHTS[ML_NUM_FEATURES] = {3.0103209439, 0.0188881899, 0.9957792523, -9.2617053868};
+constexpr double ML_BIAS = -4.5850997366;
 
-// Placeholder scalers (will be overwritten by CloudLab retraining)
-constexpr double ML_SCALER_MEAN[ML_NUM_FEATURES] = {0.0, 0.0, 0.0, 0.0};
-constexpr double ML_SCALER_STD[ML_NUM_FEATURES]  = {1.0, 1.0, 1.0, 1.0};
+constexpr double ML_SCALER_MEAN[ML_NUM_FEATURES] = {2.4876674659, 1.2221506929, 0.0062481654, 128.3037104557};
+constexpr double ML_SCALER_STD[ML_NUM_FEATURES]  = {2.5431749301, 1221.6604466583, 0.0539170449, 292.9375150658};
