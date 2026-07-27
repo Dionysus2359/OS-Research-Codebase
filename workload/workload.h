@@ -12,9 +12,9 @@ constexpr int HOTSPOT_PAGES = 384;  // Used in Loop phase
 
 // Real measured latencies from r650 (via MLC --latency_matrix)
 // TODO: Replace with actual measured values on CloudLab r650
-constexpr int FAST_LATENCY_NS = 88;        // Measured local DRAM on r650
-constexpr int SLOW_LATENCY_NS = 147;       // Measured remote DRAM on r650
-constexpr int SLOW_WRITE_LATENCY_NS = 187; // Measured remote write on r650
+constexpr int FAST_LATENCY_NS = 70;        // Measured local DRAM on r650
+constexpr int SLOW_LATENCY_NS = 131;       // Measured remote DRAM on r650
+constexpr int SLOW_WRITE_LATENCY_NS = 171; // Measured remote write on r650
 
 // CXL literature projection constants (kept for dual-column reporting)
 constexpr int CXL_FAST_LATENCY_NS = 80;
