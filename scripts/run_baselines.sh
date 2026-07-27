@@ -130,10 +130,11 @@ while [ $# -gt 0 ]; do
 done
 
 # ---- Execute Baselines ----
-NUM_RUNS=${NUM_RUNS:-3}
 if [ "$TRACE_MODE" == "true" ]; then
     NUM_RUNS=${NUM_RUNS:-1}
 elif [ "$ML_ONLY" == "true" ]; then
+    NUM_RUNS=${NUM_RUNS:-3}
+else
     NUM_RUNS=${NUM_RUNS:-3}
 fi
 
