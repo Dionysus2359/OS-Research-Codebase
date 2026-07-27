@@ -31,6 +31,7 @@ while [ $# -gt 0 ]; do
         --demote-margin) DEMOTE_MARGIN="$2"; shift ;;
         --ml-only) ML_ONLY=true ;;
         --large) LARGE_MODE=true ;;
+        --runs) NUM_RUNS="$2"; shift ;;
         *) 
             if [[ "$1" =~ ^[0-9]+$ ]]; then
                 SCALE=$1
@@ -86,7 +87,7 @@ run_redis_workload() {
             echo "[WARN] Large mode requested but Node 2 not found! Falling back to Node 1."
             MEMBIND=1
         fi
-        FTC=262144
+        FTC=11000
     fi
 
     # TRAP 1: Start Redis with BGSAVE disabled (--save "") on the slow node
@@ -235,12 +236,12 @@ POLICIES=("lru" "lfu" "decaying_lfu" "ml")
 
 if [ "$TRACE_MODE" == "true" ]; then
     POLICIES=("random")
-    NUM_RUNS=1
+    NUM_RUNS=${NUM_RUNS:-1}
 elif [ "$ML_ONLY" == "true" ]; then
     POLICIES=("ml")
-    NUM_RUNS=3
+    NUM_RUNS=${NUM_RUNS:-3}
 else
-    NUM_RUNS=3
+    NUM_RUNS=${NUM_RUNS:-3}
 fi
 
 for RUN in $(seq 1 $NUM_RUNS); do

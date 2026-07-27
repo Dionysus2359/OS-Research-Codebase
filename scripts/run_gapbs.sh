@@ -28,6 +28,7 @@ while [ $# -gt 0 ]; do
         --abs-thresh) ABS_THRESH="$2"; shift ;;
         --demote-margin) DEMOTE_MARGIN="$2"; shift ;;
         --ml-only) ML_ONLY=true ;;
+        --runs) NUM_RUNS="$2"; shift ;;
     esac
     shift
 done
@@ -248,12 +249,12 @@ POLICIES=("lru" "lfu" "decaying_lfu" "ml")
 
 if [ "$TRACE_MODE" == "true" ]; then
     POLICIES=("random")
-    NUM_RUNS=1
+    NUM_RUNS=${NUM_RUNS:-1}
 elif [ "$ML_ONLY" == "true" ]; then
     POLICIES=("ml")
-    NUM_RUNS=3
+    NUM_RUNS=${NUM_RUNS:-3}
 else
-    NUM_RUNS=3
+    NUM_RUNS=${NUM_RUNS:-3}
 fi
 
 # Run workloads

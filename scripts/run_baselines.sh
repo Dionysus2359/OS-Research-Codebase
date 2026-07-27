@@ -124,16 +124,17 @@ while [ $# -gt 0 ]; do
     case "$1" in
         --trace) TRACE_MODE=true; mkdir -p "${PROJECT_ROOT}/ml/traces" ;;
         --ml-only) ML_ONLY=true ;;
+        --runs) NUM_RUNS="$2"; shift ;;
     esac
     shift
 done
 
 # ---- Execute Baselines ----
-NUM_RUNS=3
+NUM_RUNS=${NUM_RUNS:-3}
 if [ "$TRACE_MODE" == "true" ]; then
-    NUM_RUNS=1
+    NUM_RUNS=${NUM_RUNS:-1}
 elif [ "$ML_ONLY" == "true" ]; then
-    NUM_RUNS=3
+    NUM_RUNS=${NUM_RUNS:-3}
 fi
 
 for RUN in $(seq 1 $NUM_RUNS); do
