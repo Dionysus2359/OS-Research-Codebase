@@ -66,6 +66,11 @@ run_daemon_baseline() {
     sleep 2
     sudo kill -SIGINT $DAEMON_PID 2>/dev/null || true
     wait $DAEMON_PID 2>/dev/null || true
+    if [ "$TRACE_MODE" == "true" ]; then
+        REAL_USER=${SUDO_USER:-$USER}
+        sudo chown $REAL_USER:$REAL_USER "${PROJECT_ROOT}/ml/traces/trace_${POLICY}.csv" 2>/dev/null || true
+        mv "${PROJECT_ROOT}/ml/traces/trace_${POLICY}.csv" "${PROJECT_ROOT}/ml/traces/trace_${POLICY}_synthetic.csv" 2>/dev/null || true
+    fi
     
     echo 1 | sudo tee /proc/sys/kernel/numa_balancing > /dev/null
     echo always | sudo tee /sys/kernel/mm/transparent_hugepage/enabled > /dev/null
