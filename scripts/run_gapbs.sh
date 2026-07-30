@@ -19,7 +19,9 @@ SCALE=${1:-20}
 TRACE_MODE=false
 ABS_THRESH=""
 DEMOTE_MARGIN=""
+FILL_THRESH=""
 ML_ONLY=false
+CONSTRAINED=false
 
 shift  # consume $1 (scale)
 while [ $# -gt 0 ]; do
@@ -27,11 +29,17 @@ while [ $# -gt 0 ]; do
         --trace) TRACE_MODE=true; mkdir -p "${PROJECT_ROOT}/ml/traces" ;;
         --abs-thresh) ABS_THRESH="$2"; shift ;;
         --demote-margin) DEMOTE_MARGIN="$2"; shift ;;
+        --fill-threshold) FILL_THRESH="$2"; shift ;;
+        --constrained) CONSTRAINED=true ;;
         --ml-only) ML_ONLY=true ;;
         --runs) NUM_RUNS="$2"; shift ;;
     esac
     shift
 done
+
+if [ "$CONSTRAINED" == "true" ]; then
+    RESULTS_BASE="${PROJECT_ROOT}/results_constrained/gapbs"
+fi
 
 # Removed mkdir -p "$RESULTS_DIR" since it happens in loop
 # Force PMU settings
@@ -101,7 +109,18 @@ run_gapbs_kernel() {
     elif [ "$SCALE" -le 20 ]; then
         TRIALS=300
         # Change FTC from 128 to 2000 (roughly 8MB, allowing a realistic swap space for a tiny graph)
-        DAEMON_ARGS=("--slow-node" "$MEMBIND" "--fast-tier-capacity" "2000" "--max-promotions" "256" "--max-demotions" "256")
+        FTC=2000
+        DAEMON_ARGS=("--slow-node" "$MEMBIND" "--fast-tier-capacity" "$FTC" "--max-promotions" "256" "--max-demotions" "256")
+    fi
+
+    if [ "$CONSTRAINED" == "true" ]; then
+        FTC=$((FTC / 4))
+        for i in "${!DAEMON_ARGS[@]}"; do
+            if [ "${DAEMON_ARGS[$i]}" == "--fast-tier-capacity" ]; then
+                DAEMON_ARGS[$((i+1))]="$FTC"
+                break
+            fi
+        done
     fi
 
     # Prevent CSV bombs for PageRank but ensure enough epochs for K=10 lookahead
@@ -142,6 +161,9 @@ run_gapbs_kernel() {
     fi
     if [ -n "$DEMOTE_MARGIN" ]; then
         DAEMON_ARGS+=("--demote-margin" "$DEMOTE_MARGIN")
+    fi
+    if [ -n "$FILL_THRESH" ]; then
+        DAEMON_ARGS+=("--fill-threshold" "$FILL_THRESH")
     fi
 
     # Start daemon

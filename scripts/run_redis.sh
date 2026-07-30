@@ -21,7 +21,9 @@ TRACE_MODE=false
 LARGE_MODE=false
 ABS_THRESH=""
 DEMOTE_MARGIN=""
+FILL_THRESH=""
 ML_ONLY=false
+CONSTRAINED=false
 SCALE=1
 
 while [ $# -gt 0 ]; do
@@ -29,8 +31,10 @@ while [ $# -gt 0 ]; do
         --trace) TRACE_MODE=true; mkdir -p "${PROJECT_ROOT}/ml/traces" ;;
         --abs-thresh) ABS_THRESH="$2"; shift ;;
         --demote-margin) DEMOTE_MARGIN="$2"; shift ;;
+        --fill-threshold) FILL_THRESH="$2"; shift ;;
         --ml-only) ML_ONLY=true ;;
         --large) LARGE_MODE=true ;;
+        --constrained) CONSTRAINED=true ;;
         --runs) NUM_RUNS="$2"; shift ;;
         *) 
             if [[ "$1" =~ ^[0-9]+$ ]]; then
@@ -40,6 +44,10 @@ while [ $# -gt 0 ]; do
     esac
     shift
 done
+
+if [ "$CONSTRAINED" == "true" ]; then
+    RESULTS_BASE="${PROJECT_ROOT}/results_constrained/redis"
+fi
 
 # Automatically enable LARGE_MODE if SCALE >= 5 to prevent FTC choke
 if [ "$SCALE" -ge 5 ]; then
@@ -90,6 +98,10 @@ run_redis_workload() {
         FTC=11000
     fi
 
+    if [ "$CONSTRAINED" == "true" ]; then
+        FTC=$((FTC / 4))
+    fi
+
     # TRAP 1: Start Redis with BGSAVE disabled (--save "") on the slow node
     echo "[*] Starting Redis server on Node ${MEMBIND}..."
     numactl --membind=${MEMBIND} --cpubind=0 \
@@ -129,6 +141,9 @@ run_redis_workload() {
     fi
     if [ -n "$DEMOTE_MARGIN" ]; then
         DAEMON_ARGS+=("--demote-margin" "$DEMOTE_MARGIN")
+    fi
+    if [ -n "$FILL_THRESH" ]; then
+        DAEMON_ARGS+=("--fill-threshold" "$FILL_THRESH")
     fi
     if [ "$TRACE_MODE" == "true" ]; then
         DAEMON_ARGS+=("--trace" "--trace-dir" "${PROJECT_ROOT}/ml/traces")

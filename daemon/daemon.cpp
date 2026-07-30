@@ -23,7 +23,7 @@ void signal_handler(int signum) {
 }
 
 void print_usage() {
-    cerr << "Usage: sudo ./daemon <policy_name> --pid <workload_pid> [--abs-thresh X] [--demote-margin X] [--trace]" << endl;
+    cerr << "Usage: sudo ./daemon <policy_name> --pid <workload_pid> [--fill-threshold X] [--abs-thresh X] [--demote-margin X] [--trace]" << endl;
     cerr << "Available policies: lru, lfu, decaying_lfu, ml" << endl;
 }
 
@@ -65,6 +65,7 @@ int main(int argc, char* argv[]) {
     string trace_dir_opt = "/tmp";
     double abs_thresh_val = -1.0;
     double demote_margin_val = -1.0;
+    double fill_threshold_val = 0.300;
 
     for (int i = 4; i < argc; ++i) {
         if (string(argv[i]) == "--trace") {
@@ -83,6 +84,8 @@ int main(int argc, char* argv[]) {
             abs_thresh_val = stod(argv[++i]);
         } else if (string(argv[i]) == "--demote-margin" && i + 1 < argc) {
             demote_margin_val = stod(argv[++i]);
+        } else if (string(argv[i]) == "--fill-threshold" && i + 1 < argc) {
+            fill_threshold_val = stod(argv[++i]);
         }
     }
     
@@ -91,6 +94,8 @@ int main(int argc, char* argv[]) {
         cerr << "Unknown policy: " << policy_name << "\n";
         return 1;
     }
+
+    policy->set_fill_threshold(fill_threshold_val);
 
     if (abs_thresh_val >= 0 && demote_margin_val >= 0) {
         policy->set_margins(abs_thresh_val, demote_margin_val);
