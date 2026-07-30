@@ -24,6 +24,7 @@ ML_ONLY=false
 CONSTRAINED=false
 ONLY_BFS=false
 ONLY_PR=false
+SKIP_AUTONUMA=false
 
 shift  # consume $1 (scale)
 while [ $# -gt 0 ]; do
@@ -34,6 +35,7 @@ while [ $# -gt 0 ]; do
         --fill-threshold) FILL_THRESH="$2"; shift ;;
         --constrained) CONSTRAINED=true ;;
         --ml-only) ML_ONLY=true ;;
+        --skip-autonuma) SKIP_AUTONUMA=true ;;
         --runs) NUM_RUNS="$2"; shift ;;
         --bfs) ONLY_BFS=true ;;
         --pr) ONLY_PR=true ;;
@@ -302,7 +304,7 @@ for RUN in $(seq 1 $NUM_RUNS); do
         for POLICY in "${POLICIES[@]}"; do
             run_gapbs_kernel "$KERNEL" "$POLICY"
         done
-        if [ "$TRACE_MODE" != "true" ] && [ "$ML_ONLY" != "true" ]; then
+        if [ "$TRACE_MODE" != "true" ] && [ "$ML_ONLY" != "true" ] && [ "$SKIP_AUTONUMA" != "true" ]; then
             if [ "$RUN" -gt 1 ]; then
                 echo "[!] Skipping AutoNUMA ${KERNEL} for Run $RUN (runs too long, only tracking first run)"
             else

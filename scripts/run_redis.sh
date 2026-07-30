@@ -24,6 +24,7 @@ DEMOTE_MARGIN=""
 FILL_THRESH=""
 ML_ONLY=false
 CONSTRAINED=false
+SKIP_AUTONUMA=false
 SCALE=1
 
 while [ $# -gt 0 ]; do
@@ -35,6 +36,7 @@ while [ $# -gt 0 ]; do
         --ml-only) ML_ONLY=true ;;
         --large) LARGE_MODE=true ;;
         --constrained) CONSTRAINED=true ;;
+        --skip-autonuma) SKIP_AUTONUMA=true ;;
         --runs) NUM_RUNS="$2"; shift ;;
         *) 
             if [[ "$1" =~ ^[0-9]+$ ]]; then
@@ -270,7 +272,7 @@ for RUN in $(seq 1 $NUM_RUNS); do
         run_redis_workload "$POLICY"
     done
 
-    if [ "$TRACE_MODE" != "true" ] && [ "$ML_ONLY" != "true" ]; then
+    if [ "$TRACE_MODE" != "true" ] && [ "$ML_ONLY" != "true" ] && [ "$SKIP_AUTONUMA" != "true" ]; then
         run_redis_autonuma
     fi
 done
