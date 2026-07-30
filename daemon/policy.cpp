@@ -198,7 +198,7 @@ void MLPolicy::execute(TierManager& mgr) {
 
     // When FTC has room, fill using conservative threshold (slightly relaxed for PR).
     // When FTC is full, use CUSUM-driven threshold for strict swaps.
-    static constexpr double FILL_THRESHOLD = 0.250;
+    static constexpr double FILL_THRESHOLD = 0.300;
 
     for (size_t i = 0; i < slow_candidates.size()
          && (int)to_promote.size() < MAX_PROMOTIONS_PER_EPOCH;  // batch cap
