@@ -22,6 +22,8 @@ DEMOTE_MARGIN=""
 FILL_THRESH=""
 ML_ONLY=false
 CONSTRAINED=false
+ONLY_BFS=false
+ONLY_PR=false
 
 shift  # consume $1 (scale)
 while [ $# -gt 0 ]; do
@@ -33,6 +35,8 @@ while [ $# -gt 0 ]; do
         --constrained) CONSTRAINED=true ;;
         --ml-only) ML_ONLY=true ;;
         --runs) NUM_RUNS="$2"; shift ;;
+        --bfs) ONLY_BFS=true ;;
+        --pr) ONLY_PR=true ;;
     esac
     shift
 done
@@ -266,7 +270,14 @@ run_gapbs_autonuma() {
     echo "Done: ${KERNEL}_autonuma"
 }
 
-KERNELS=("bfs" "pr")
+if [ "$ONLY_BFS" == "true" ]; then
+    KERNELS=("bfs")
+elif [ "$ONLY_PR" == "true" ]; then
+    KERNELS=("pr")
+else
+    KERNELS=("bfs" "pr")
+fi
+
 POLICIES=("lru" "lfu" "decaying_lfu" "ml")
 
 if [ "$TRACE_MODE" == "true" ]; then
@@ -292,8 +303,8 @@ for RUN in $(seq 1 $NUM_RUNS); do
             run_gapbs_kernel "$KERNEL" "$POLICY"
         done
         if [ "$TRACE_MODE" != "true" ] && [ "$ML_ONLY" != "true" ]; then
-            if [ "$KERNEL" == "pr" ] && [ "$RUN" -gt 1 ]; then
-                echo "[!] Skipping AutoNUMA PR for Run $RUN (runs too long, only tracking first run)"
+            if [ "$RUN" -gt 1 ]; then
+                echo "[!] Skipping AutoNUMA ${KERNEL} for Run $RUN (runs too long, only tracking first run)"
             else
                 run_gapbs_autonuma "$KERNEL"
             fi
