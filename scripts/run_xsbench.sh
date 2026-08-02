@@ -53,8 +53,8 @@ if [ "$ML_ONLY" == "true" ]; then
     POLICIES=("ml")
 fi
 
-# Assuming XSBench is cloned to workload/XSBench/src and compiled
-XSBENCH_BIN="${PROJECT_ROOT}/workload/XSBench/src/XSBench"
+# Assuming XSBench is cloned to workload/XSBench/openmp-threading and compiled
+XSBENCH_BIN="${PROJECT_ROOT}/workload/XSBench/openmp-threading/XSBench"
 
 for POLICY in "${POLICIES[@]}"; do
     for RUN in $(seq 1 $RUNS); do
