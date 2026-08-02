@@ -307,11 +307,7 @@ for RUN in $(seq 1 $NUM_RUNS); do
             run_gapbs_kernel "$KERNEL" "$POLICY"
         done
         if [ "$TRACE_MODE" != "true" ] && [ "$ML_ONLY" != "true" ] && [ "$SKIP_AUTONUMA" != "true" ]; then
-            if [ "$RUN" -gt 1 ]; then
-                echo "[!] Skipping AutoNUMA ${KERNEL} for Run $RUN (runs too long, only tracking first run)"
-            else
-                run_gapbs_autonuma "$KERNEL"
-            fi
+            run_gapbs_autonuma "$KERNEL"
         fi
     done
 done

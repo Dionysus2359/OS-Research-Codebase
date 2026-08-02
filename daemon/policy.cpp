@@ -262,8 +262,12 @@ void RandomPolicy::execute(TierManager& mgr) {
                 fast_cands.push_back(&pair.second);
             }
         }
+        std::random_device rd;
+        std::mt19937 gen(rd());
+        
         for (int i = 0; i < MAX_DEMOTIONS_PER_EPOCH && !fast_cands.empty(); i++) {
-            int idx = rand() % fast_cands.size();
+            std::uniform_int_distribution<> distrib(0, fast_cands.size() - 1);
+            int idx = distrib(gen);
             to_demote.push_back(fast_cands[idx]->page_va);
             fast_cands[idx] = fast_cands.back();
             fast_cands.pop_back();
