@@ -23,9 +23,10 @@ ABS_THRESH=""
 DEMOTE_MARGIN=""
 FILL_THRESH=""
 ML_ONLY=false
-CONSTRAINED=false
 SKIP_AUTONUMA=false
 SCALE=1
+FTC_RATIO=100
+EPOCH_MS=100
 
 while [ $# -gt 0 ]; do
     case "$1" in
@@ -35,9 +36,10 @@ while [ $# -gt 0 ]; do
         --fill-threshold) FILL_THRESH="$2"; shift ;;
         --ml-only) ML_ONLY=true ;;
         --large) LARGE_MODE=true ;;
-        --constrained) CONSTRAINED=true ;;
         --skip-autonuma) SKIP_AUTONUMA=true ;;
         --runs) NUM_RUNS="$2"; shift ;;
+        --ftc-ratio) FTC_RATIO="$2"; shift ;;
+        --epoch-ms) EPOCH_MS="$2"; shift ;;
         *) 
             if [[ "$1" =~ ^[0-9]+$ ]]; then
                 SCALE=$1
@@ -46,10 +48,6 @@ while [ $# -gt 0 ]; do
     esac
     shift
 done
-
-if [ "$CONSTRAINED" == "true" ]; then
-    RESULTS_BASE="${PROJECT_ROOT}/results_constrained/redis"
-fi
 
 # Automatically enable LARGE_MODE if SCALE >= 5 to prevent FTC choke
 if [ "$SCALE" -ge 5 ]; then
@@ -100,8 +98,9 @@ run_redis_workload() {
         FTC=11000
     fi
 
-    if [ "$CONSTRAINED" == "true" ]; then
-        FTC=$((FTC / 4))
+    if [ "$FTC_RATIO" != "100" ]; then
+        FTC=$((FTC * FTC_RATIO / 100))
+        RESULTS_BASE="${PROJECT_ROOT}/results/redis_capacity_${FTC_RATIO}"
     fi
 
     # TRAP 1: Start Redis with BGSAVE disabled (--save "") on the slow node
@@ -152,7 +151,7 @@ run_redis_workload() {
     fi
 
     echo "[*] Starting daemon (Policy: ${POLICY})..."
-    sudo "$DAEMON_DIR/daemon" "$POLICY" --pid "$REDIS_PID" "${DAEMON_ARGS[@]}" \
+    sudo "$DAEMON_DIR/daemon" "$POLICY" --pid "$REDIS_PID" --epoch-ms "$EPOCH_MS" "${DAEMON_ARGS[@]}" \
         > "${RESULTS_DIR}/redis_${POLICY}_summary.csv" \
         2> "${RESULTS_DIR}/redis_${POLICY}_stderr.log" &
     DAEMON_PID=$!

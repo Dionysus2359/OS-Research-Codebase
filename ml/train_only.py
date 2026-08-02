@@ -17,12 +17,23 @@ FEATURE_COLS = [
     # "aci"
 ]
 
-print("Loading pre-labeled dataset...")
-if not os.path.exists("labeled_dataset.csv"):
-    print("Error: labeled_dataset.csv not found! Run label_and_train_v2.py first.")
+import argparse
+
+parser = argparse.ArgumentParser()
+parser.add_argument("--trace-file", type=str, default="labeled_dataset.csv")
+parser.add_argument("--drop-feature", type=str, default="none")
+args = parser.parse_args()
+
+if args.drop_feature != "none" and args.drop_feature in FEATURE_COLS:
+    FEATURE_COLS.remove(args.drop_feature)
+    print(f"[*] ABLATION MODE: Dropped feature '{args.drop_feature}'")
+
+print("Loading dataset...")
+if not os.path.exists(args.trace_file):
+    print(f"Error: {args.trace_file} not found!")
     sys.exit(1)
 
-df_labeled = pd.read_csv("labeled_dataset.csv")
+df_labeled = pd.read_csv(args.trace_file)
 
 print("\n--- Feature Correlation Matrix ---")
 print(df_labeled[FEATURE_COLS + ["label"]].corr())

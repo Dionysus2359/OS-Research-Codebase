@@ -18,6 +18,9 @@ workload/gapbs/tc
 
 # Downloaded workloads
 workload/ycsb/
+workload/XSBench/
+workload/memtier_benchmark/
+workload/rocksdb/
 
 # Results (reproducible, not tracked)
 results/

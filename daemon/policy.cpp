@@ -235,6 +235,7 @@ Policy* get_policy(const string& name) {
     if (name == "lfu") return new LFUPolicy();
     if (name == "decaying_lfu") return new DecayingLFUPolicy();
     if (name == "ml") return new MLPolicy();
+    if (name == "heuristic") return new HeuristicPolicy();
     if (name == "random") return new RandomPolicy();
     return nullptr;
 }
@@ -248,35 +249,100 @@ void RandomPolicy::execute(TierManager& mgr) {
         }
     }
     
-    std::random_device rd;
-    std::mt19937 g(rd());
-    std::shuffle(slow_cands.begin(), slow_cands.end(), g);
+    // Pick random pages to promote
+    vector<uintptr_t> to_promote;
+    int free_fast_slots = FAST_TIER_CAPACITY - mgr.get_fast_tier_count();
+    
+    // Simplistic random replacement: demote random fast pages if needed
+    vector<uintptr_t> to_demote;
+    if (free_fast_slots <= 0) {
+        vector<PageMetadata*> fast_cands;
+        for (auto& pair : meta) {
+            if (pair.second.current_node == 0) {
+                fast_cands.push_back(&pair.second);
+            }
+        }
+        for (int i = 0; i < MAX_DEMOTIONS_PER_EPOCH && !fast_cands.empty(); i++) {
+            int idx = rand() % fast_cands.size();
+            to_demote.push_back(fast_cands[idx]->page_va);
+            fast_cands[idx] = fast_cands.back();
+            fast_cands.pop_back();
+            free_fast_slots++;
+        }
+    }
+    
+    for (int i = 0; i < MAX_PROMOTIONS_PER_EPOCH && free_fast_slots > 0 && !slow_cands.empty(); i++) {
+        int idx = rand() % slow_cands.size();
+        to_promote.push_back(slow_cands[idx]->page_va);
+        slow_cands[idx] = slow_cands.back();
+        slow_cands.pop_back();
+        free_fast_slots--;
+    }
+    
+    mgr.migrate_pages(to_demote, SLOW_NODE);
+    mgr.migrate_pages(to_promote, 0);
+}
 
+void HeuristicPolicy::execute(TierManager& mgr) {
+    auto meta = mgr.get_metadata();
+    struct ScoredPage { uintptr_t page_va; double score; };
+    vector<ScoredPage> slow_candidates;
+    vector<ScoredPage> fast_pages;
+    
+    for (auto& pair : meta) {
+        auto& pm = pair.second;
+        
+        if (pm.current_node == SLOW_NODE && !pm.accessed_this_epoch) {
+            continue; 
+        }
+        
+        // Static Heuristic: 
+        // If it has been accessed in the current epoch (access_count >= 1) 
+        // AND was accessed recently (epochs_since_access <= 5), consider it HOT (1.0).
+        // Otherwise COLD (0.0).
+        // We add a tiny tie-breaker using access_count so we can sort the hot pages.
+        double s = (pm.access_count >= 1 && pm.epochs_since_access <= 5) ? 1.0 : 0.0;
+        s += ((double)pm.access_count * 0.001);
+        
+        if (pm.current_node == SLOW_NODE && pm.accessed_this_epoch) {
+            slow_candidates.push_back({pm.page_va, s});
+        } else if (pm.current_node == 0) {
+            fast_pages.push_back({pm.page_va, s});
+        }
+    }
+    
+    sort(slow_candidates.begin(), slow_candidates.end(),
+         [](const ScoredPage& a, const ScoredPage& b) { return a.score > b.score; });
+         
+    sort(fast_pages.begin(), fast_pages.end(),
+         [](const ScoredPage& a, const ScoredPage& b) { return a.score < b.score; });
+         
     vector<uintptr_t> to_promote;
     vector<uintptr_t> to_demote;
     
-    // Pick random pages to promote
     int free_fast_slots = FAST_TIER_CAPACITY - mgr.get_fast_tier_count();
-    int promoted = 0;
-    for (auto& cand : slow_cands) {
-        if (promoted >= MAX_PROMOTIONS_PER_EPOCH) break;
+    size_t demote_idx = 0;
+    
+    for (size_t i = 0; i < slow_candidates.size() && (int)to_promote.size() < MAX_PROMOTIONS_PER_EPOCH; ++i) {
+        // Only promote if it matches the heuristic criteria (> 0.5)
+        if (slow_candidates[i].score < 0.5) continue;
+        
         if (free_fast_slots > 0) {
-            to_promote.push_back(cand->page_va);
+            to_promote.push_back(slow_candidates[i].page_va);
             free_fast_slots--;
-            promoted++;
-        } else {
-            // Need to evict a random fast page
-            // We just grab the first one in the metadata map for simplicity (maps are semi-random based on hash)
-            for (auto& p : meta) {
-                if (p.second.current_node == 0 && std::find(to_demote.begin(), to_demote.end(), p.first) == to_demote.end()) {
-                    to_demote.push_back(p.first);
-                    to_promote.push_back(cand->page_va);
-                    promoted++;
-                    break;
-                }
+        } else if (demote_idx < fast_pages.size()) {
+            if (fast_pages[demote_idx].score < 0.5) {
+                to_demote.push_back(fast_pages[demote_idx].page_va);
+                to_promote.push_back(slow_candidates[i].page_va);
+                demote_idx++;
+            } else {
+                break; // No more cold victims
             }
+        } else {
+            break;
         }
     }
+    
     mgr.migrate_pages(to_demote, SLOW_NODE);
     mgr.migrate_pages(to_promote, 0);
 }

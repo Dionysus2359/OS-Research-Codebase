@@ -21,10 +21,10 @@ ABS_THRESH=""
 DEMOTE_MARGIN=""
 FILL_THRESH=""
 ML_ONLY=false
-CONSTRAINED=false
 ONLY_BFS=false
-ONLY_PR=false
 SKIP_AUTONUMA=false
+FTC_RATIO=100
+EPOCH_MS=100
 
 shift  # consume $1 (scale)
 while [ $# -gt 0 ]; do
@@ -33,21 +33,17 @@ while [ $# -gt 0 ]; do
         --abs-thresh) ABS_THRESH="$2"; shift ;;
         --demote-margin) DEMOTE_MARGIN="$2"; shift ;;
         --fill-threshold) FILL_THRESH="$2"; shift ;;
-        --constrained) CONSTRAINED=true ;;
         --ml-only) ML_ONLY=true ;;
         --skip-autonuma) SKIP_AUTONUMA=true ;;
         --runs) NUM_RUNS="$2"; shift ;;
+        --ftc-ratio) FTC_RATIO="$2"; shift ;;
+        --epoch-ms) EPOCH_MS="$2"; shift ;;
         --bfs) ONLY_BFS=true ;;
         --pr) ONLY_PR=true ;;
     esac
     shift
 done
 
-if [ "$CONSTRAINED" == "true" ]; then
-    RESULTS_BASE="${PROJECT_ROOT}/results_constrained/gapbs"
-fi
-
-# Removed mkdir -p "$RESULTS_DIR" since it happens in loop
 # Force PMU settings
 sudo sysctl -w kernel.perf_event_max_sample_rate=50000 > /dev/null 2>&1 || true
 echo 0 | sudo tee /proc/sys/kernel/perf_cpu_time_max_percent > /dev/null || true
@@ -116,18 +112,20 @@ run_gapbs_kernel() {
         TRIALS=300
         # Change FTC from 128 to 2000 (roughly 8MB, allowing a realistic swap space for a tiny graph)
         FTC=2000
-        DAEMON_ARGS=("--slow-node" "$MEMBIND" "--fast-tier-capacity" "$FTC" "--max-promotions" "256" "--max-demotions" "256")
     fi
 
-    if [ "$CONSTRAINED" == "true" ]; then
-        FTC=$((FTC / 4))
-        for i in "${!DAEMON_ARGS[@]}"; do
-            if [ "${DAEMON_ARGS[$i]}" == "--fast-tier-capacity" ]; then
-                DAEMON_ARGS[$((i+1))]="$FTC"
-                break
-            fi
-        done
+    if [ "$FTC_RATIO" != "100" ]; then
+        # Ensure floating point or integer division works (FTC * RATIO / 100)
+        FTC=$((FTC * FTC_RATIO / 100))
+        RESULTS_BASE="${PROJECT_ROOT}/results/gapbs_capacity_${FTC_RATIO}"
     fi
+    
+    if [ "$SCALE" -ge 23 ]; then
+        DAEMON_ARGS=("--slow-node" "$MEMBIND" "--fast-tier-capacity" "$FTC" "--max-promotions" "1024" "--max-demotions" "1024" "--epoch-ms" "$EPOCH_MS")
+    else
+        DAEMON_ARGS=("--slow-node" "$MEMBIND" "--fast-tier-capacity" "$FTC" "--max-promotions" "256" "--max-demotions" "256" "--epoch-ms" "$EPOCH_MS")
+    fi
+
 
     # Prevent CSV bombs for PageRank but ensure enough epochs for K=10 lookahead
     if [ "$TRACE_MODE" == "true" ] && [ "$KERNEL" == "pr" ]; then

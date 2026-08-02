@@ -65,7 +65,8 @@ int main(int argc, char* argv[]) {
     string trace_dir_opt = "/tmp";
     double abs_thresh_val = -1.0;
     double demote_margin_val = -1.0;
-    double fill_threshold_val = 0.300;
+    double fill_threshold_val = 0.370;
+    double epoch_interval_ms = 100.0;
 
     for (int i = 4; i < argc; ++i) {
         if (string(argv[i]) == "--trace") {
@@ -86,6 +87,8 @@ int main(int argc, char* argv[]) {
             demote_margin_val = stod(argv[++i]);
         } else if (string(argv[i]) == "--fill-threshold" && i + 1 < argc) {
             fill_threshold_val = stod(argv[++i]);
+        } else if (string(argv[i]) == "--epoch-ms" && i + 1 < argc) {
+            epoch_interval_ms = stod(argv[++i]);
         }
     }
     
@@ -272,11 +275,11 @@ int main(int argc, char* argv[]) {
 
         epoch++;
         
-        if (epoch_ms < 100.0) {
-            usleep((int)((100.0 - epoch_ms) * 1000));
+        if (epoch_ms < epoch_interval_ms) {
+            usleep((int)((epoch_interval_ms - epoch_ms) * 1000));
         } else {
             cerr << "[Daemon] WARNING: Epoch " << epoch - 1
-                 << " took " << epoch_ms << "ms (over budget)" << endl;
+                 << " took " << epoch_ms << "ms (over budget of " << epoch_interval_ms << "ms)" << endl;
         }
     }
 

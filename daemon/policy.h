@@ -45,6 +45,11 @@ private:
     CUSUMDetector cusum;
 };
 
+class HeuristicPolicy : public Policy {
+public:
+    void execute(TierManager& mgr) override;
+};
+
 class RandomPolicy : public Policy {
 public:
     void execute(TierManager& mgr) override;
