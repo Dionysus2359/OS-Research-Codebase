@@ -249,6 +249,9 @@ void RandomPolicy::execute(TierManager& mgr) {
         }
     }
     
+    std::random_device rd;
+    std::mt19937 gen(rd());
+    
     // Pick random pages to promote
     vector<uintptr_t> to_promote;
     int free_fast_slots = FAST_TIER_CAPACITY - mgr.get_fast_tier_count();
@@ -262,8 +265,6 @@ void RandomPolicy::execute(TierManager& mgr) {
                 fast_cands.push_back(&pair.second);
             }
         }
-        std::random_device rd;
-        std::mt19937 gen(rd());
         
         for (int i = 0; i < MAX_DEMOTIONS_PER_EPOCH && !fast_cands.empty(); i++) {
             std::uniform_int_distribution<> distrib(0, fast_cands.size() - 1);
