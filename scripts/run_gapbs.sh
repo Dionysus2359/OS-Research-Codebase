@@ -120,6 +120,10 @@ run_gapbs_kernel() {
         RESULTS_BASE="${PROJECT_ROOT}/results/gapbs_capacity_${FTC_RATIO}"
     fi
     
+    if [ -n "$RESULTS_DIR_SUFFIX" ]; then
+        RESULTS_BASE="${RESULTS_BASE}${RESULTS_DIR_SUFFIX}"
+    fi
+    
     if [ "$SCALE" -ge 23 ]; then
         DAEMON_ARGS=("--slow-node" "$MEMBIND" "--fast-tier-capacity" "$FTC" "--max-promotions" "1024" "--max-demotions" "1024" "--epoch-ms" "$EPOCH_MS")
     else

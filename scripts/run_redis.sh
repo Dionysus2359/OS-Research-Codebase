@@ -103,6 +103,10 @@ run_redis_workload() {
         RESULTS_BASE="${PROJECT_ROOT}/results/redis_capacity_${FTC_RATIO}"
     fi
 
+    if [ -n "$RESULTS_DIR_SUFFIX" ]; then
+        RESULTS_BASE="${RESULTS_BASE}${RESULTS_DIR_SUFFIX}"
+    fi
+
     # TRAP 1: Start Redis with BGSAVE disabled (--save "") on the slow node
     echo "[*] Starting Redis server on Node ${MEMBIND}..."
     numactl --membind=${MEMBIND} --cpubind=0 \

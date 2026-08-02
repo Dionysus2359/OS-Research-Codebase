@@ -34,18 +34,13 @@ for feature in "${FEATURES[@]}"; do
     make -C ../daemon clean && make -C ../daemon
     
     # 3. Run workload
+    export RESULTS_DIR_SUFFIX="_ablation_${feature}"
     ./run_gapbs.sh 25 --bfs --runs "$RUNS" --ml-only
     ./run_redis.sh 1 --runs "$RUNS" --ml-only
     ./run_memcached.sh --runs "$RUNS" --ml-only
     ./run_rocksdb.sh --runs "$RUNS" --ml-only
     ./run_xsbench.sh --runs "$RUNS" --ml-only
-    
-    # Move results so they aren't overwritten
-    mv ../results/gapbs ../results/gapbs_ablation_${feature} 2>/dev/null || true
-    mv ../results/redis ../results/redis_ablation_${feature} 2>/dev/null || true
-    mv ../results/memcached ../results/memcached_ablation_${feature} 2>/dev/null || true
-    mv ../results/rocksdb ../results/rocksdb_ablation_${feature} 2>/dev/null || true
-    mv ../results/xsbench ../results/xsbench_ablation_${feature} 2>/dev/null || true
+    unset RESULTS_DIR_SUFFIX
     
     echo "Completed ablation for ${feature}"
 done

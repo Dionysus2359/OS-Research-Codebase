@@ -41,6 +41,10 @@ if [ "$FTC_RATIO" != "100" ]; then
     RESULTS_BASE="${PROJECT_ROOT}/results/xsbench_capacity_${FTC_RATIO}"
 fi
 
+if [ -n "$RESULTS_DIR_SUFFIX" ]; then
+    RESULTS_BASE="${RESULTS_BASE}${RESULTS_DIR_SUFFIX}"
+fi
+
 sudo sysctl -w kernel.perf_event_max_sample_rate=50000 > /dev/null 2>&1 || true
 make -C "$DAEMON_DIR" clean && make -C "$DAEMON_DIR"
 

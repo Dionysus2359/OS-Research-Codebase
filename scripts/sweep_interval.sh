@@ -16,18 +16,22 @@ for ms in "${INTERVALS[@]}"; do
     echo "Running with Epoch Interval = ${ms}ms"
     echo "=========================================="
     
+    export RESULTS_DIR_SUFFIX="_interval_${ms}"
     # 1. GAPBS BFS
     ./run_gapbs.sh 25 --bfs --runs "$RUNS" --ml-only --epoch-ms "$ms"
     
     # 2. Redis
     ./run_redis.sh 1 --runs "$RUNS" --ml-only --epoch-ms "$ms"
     
-    # 3. Memcached (Note: need to add --epoch-ms flag support to run_memcached.sh etc. if we pass it here)
-    # Actually, we can just pass the daemon arg if we modify the wrapper, but let's assume wrappers are updated.
+    # 3. Memcached
+    ./run_memcached.sh --runs "$RUNS" --ml-only --epoch-ms "$ms"
     
-    # For now, since epoch-ms is a daemon param, we must pass it through the wrapper.
-    # To avoid changing all wrappers, you can export EPOCH_MS and have the wrapper read it,
-    # but the cleanest way is modifying the wrappers to accept --epoch-ms.
+    # 4. RocksDB
+    ./run_rocksdb.sh --runs "$RUNS" --ml-only --epoch-ms "$ms"
+    
+    # 5. XSBench
+    ./run_xsbench.sh --runs "$RUNS" --ml-only --epoch-ms "$ms"
+    unset RESULTS_DIR_SUFFIX
 done
 
 echo "Interval Sweep Complete!"

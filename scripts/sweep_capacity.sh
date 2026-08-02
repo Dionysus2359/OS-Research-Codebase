@@ -16,8 +16,12 @@ for ratio in "${RATIOS[@]}"; do
     echo "Running with FTC Ratio = ${ratio}%"
     echo "=========================================="
     
-    # 1. GAPBS BFS
+    # 1. GAPBS BFS (and PR for the 20% baseline)
     ./run_gapbs.sh 25 --bfs --runs "$RUNS" --ftc-ratio "$ratio"
+    if [ "$ratio" == "20" ]; then
+        echo "Running PageRank (PR) for baseline 20% capacity..."
+        ./run_gapbs.sh 25 --pr --runs "$RUNS" --ftc-ratio "$ratio"
+    fi
     
     # 2. Redis
     ./run_redis.sh 1 --runs "$RUNS" --ftc-ratio "$ratio"
