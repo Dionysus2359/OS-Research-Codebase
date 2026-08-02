@@ -276,7 +276,8 @@ void RandomPolicy::execute(TierManager& mgr) {
     }
     
     for (int i = 0; i < MAX_PROMOTIONS_PER_EPOCH && free_fast_slots > 0 && !slow_cands.empty(); i++) {
-        int idx = rand() % slow_cands.size();
+        std::uniform_int_distribution<> distrib_slow(0, slow_cands.size() - 1);
+        int idx = distrib_slow(gen);
         to_promote.push_back(slow_cands[idx]->page_va);
         slow_cands[idx] = slow_cands.back();
         slow_cands.pop_back();
