@@ -65,20 +65,20 @@ for POLICY in "${POLICIES[@]}"; do
         
         if [ "$POLICY" == "autonuma" ]; then
             echo 1 | sudo tee /proc/sys/kernel/numa_balancing > /dev/null
-            numactl --membind=${MEMBIND} --cpubind=0 "$XSBENCH_BIN" -s large -m event > "${RESULTS_DIR}/xsbench_${POLICY}.log" &
+            numactl --membind=${MEMBIND} --cpubind=0 "$XSBENCH_BIN" -s large -m event > "${RESULTS_DIR}/xsbench_${POLICY}_stdout.log" &
             wait $!
             continue
         fi
         
         echo 0 | sudo tee /proc/sys/kernel/numa_balancing > /dev/null
-        numactl --membind=${MEMBIND} --cpubind=0 "$XSBENCH_BIN" -s large -m event > "${RESULTS_DIR}/xsbench_${POLICY}.log" &
+        numactl --membind=${MEMBIND} --cpubind=0 "$XSBENCH_BIN" -s large -m event > "${RESULTS_DIR}/xsbench_${POLICY}_stdout.log" &
         PID=$!
         sleep 2
         
         # Write mock workload_info so daemon breaks out of its polling loop
         echo -e "${PID}\n0x0\n1\n1" | sudo tee /tmp/workload_info > /dev/null
         
-        sudo "$DAEMON_DIR/daemon" "$POLICY" --pid "$PID" --slow-node ${MEMBIND} --fast-tier-capacity "$FTC" --max-promotions 1024 --max-demotions 1024 --epoch-ms "$EPOCH_MS" > "${RESULTS_DIR}/${POLICY}_summary.csv" 2> "${RESULTS_DIR}/${POLICY}_stderr.log" &
+        sudo "$DAEMON_DIR/daemon" "$POLICY" --pid "$PID" --slow-node ${MEMBIND} --fast-tier-capacity "$FTC" --max-promotions 1024 --max-demotions 1024 --epoch-ms "$EPOCH_MS" > "${RESULTS_DIR}/xsbench_${POLICY}_summary.csv" 2> "${RESULTS_DIR}/xsbench_${POLICY}_stderr.log" &
         DAEMON_PID=$!
         
         wait $PID

@@ -127,6 +127,8 @@ def main():
                                     res['app_time'] = float(line.split()[2])
                                 elif '[OVERALL], RunTime(ms)' in line:
                                     res['app_time'] = float(line.split(',')[2].strip()) / 1000.0
+                                elif 'Runtime:' in line:
+                                    res['app_time'] = float(line.split()[1])
                     except Exception:
                         pass
                         
@@ -235,6 +237,8 @@ def main():
                                 auto_time = float(line.split()[2])
                             elif '[OVERALL], RunTime(ms)' in line:
                                 auto_time = float(line.split(',')[2].strip()) / 1000.0
+                            elif 'Runtime:' in line:
+                                auto_time = float(line.split()[1])
                 
                 if auto_time is not None:
                     print(f"- **App Time (s)**:     {auto_time:.2f}")
