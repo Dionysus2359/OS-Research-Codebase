@@ -76,7 +76,7 @@ def main():
         target_dir = sys.argv[1]
     else:
         target_dir = "results"
-    policies = ['lru', 'lfu', 'decaying_lfu', 'ml']
+    policies = ['lru', 'lfu', 'decaying_lfu', 'heuristic', 'ml']
     results = {}
     
     # Check if we are running for gapbs (which prefixes files with kernel name)
