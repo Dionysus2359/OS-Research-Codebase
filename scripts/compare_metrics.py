@@ -191,6 +191,29 @@ def main():
             print(f"- **Migrations**:     {abs(mig_diff):.2f}% {'fewer (Better)' if mig_diff > 0 else 'more (Worse)'}")
             print(f"- **Migration Cost**: {abs(cost_diff):.2f}% {'lower (Better)' if cost_diff > 0 else 'higher (Worse)'}")
             print("\n")
+
+        # Print Improvements (ML vs Heuristic)
+        if 'ml' in results and 'heuristic' in results:
+            ml = results['ml']
+            heur = results['heuristic']
+            
+            print("### ML Policy Improvements vs Heuristic")
+            
+            hit_diff = (ml['hit_ratio'] - heur['hit_ratio']) * 100
+            lat_diff = ((heur['avg_latency'] - ml['avg_latency']) / heur['avg_latency']) * 100 if heur['avg_latency'] > 0 else 0
+            mig_diff = ((heur['total_migrations'] - ml['total_migrations']) / heur['total_migrations']) * 100 if heur['total_migrations'] > 0 else 0
+            cost_diff = ((heur['total_migration_cost'] - ml['total_migration_cost']) / heur['total_migration_cost']) * 100 if heur['total_migration_cost'] > 0 else 0
+            
+            print(f"- **Hit Ratio**:      {abs(hit_diff):.2f}% {'higher (Better)' if hit_diff > 0 else 'lower (Worse)'}")
+            
+            if ml.get('app_time') is not None and heur.get('app_time') is not None:
+                time_diff = ((heur['app_time'] - ml['app_time']) / heur['app_time']) * 100
+                print(f"- **App Time**:       {abs(time_diff):.2f}% {'faster (Better)' if time_diff > 0 else 'slower (Worse)'}")
+                
+            print(f"- **Avg Latency**:    {abs(lat_diff):.2f}% {'better (lower)' if lat_diff > 0 else 'worse (higher)'}")
+            print(f"- **Migrations**:     {abs(mig_diff):.2f}% {'fewer (Better)' if mig_diff > 0 else 'more (Worse)'}")
+            print(f"- **Migration Cost**: {abs(cost_diff):.2f}% {'lower (Better)' if cost_diff > 0 else 'higher (Worse)'}")
+            print("\n")
             
         # Parse AutoNUMA migrations
         autonuma_before = os.path.join(target_dir, f"{prefix}autonuma_vmstat_before.txt")
