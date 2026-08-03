@@ -60,10 +60,11 @@ if [ "$ML_ONLY" == "true" ]; then
     POLICIES=("ml")
 fi
 
-for POLICY in "${POLICIES[@]}"; do
-    for RUN in $(seq 1 $RUNS); do
-        RESULTS_DIR="${RESULTS_BASE}/run_${RUN}"
-        mkdir -p "$RESULTS_DIR"
+for RUN in $(seq 1 $RUNS); do
+    RESULTS_DIR="${RESULTS_BASE}/run_${RUN}"
+    mkdir -p "$RESULTS_DIR"
+
+    for POLICY in "${POLICIES[@]}"; do
         
         echo "Running Memcached (Run $RUN) with policy $POLICY..."
         

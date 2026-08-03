@@ -58,10 +58,11 @@ if [ "$ML_ONLY" == "true" ]; then
 fi
 DB_BENCH="${PROJECT_ROOT}/workload/rocksdb/db_bench"
 
-for POLICY in "${POLICIES[@]}"; do
-    for RUN in $(seq 1 $RUNS); do
-        RESULTS_DIR="${RESULTS_BASE}/run_${RUN}"
-        mkdir -p "$RESULTS_DIR"
+for RUN in $(seq 1 $RUNS); do
+    RESULTS_DIR="${RESULTS_BASE}/run_${RUN}"
+    mkdir -p "$RESULTS_DIR"
+
+    for POLICY in "${POLICIES[@]}"; do
         
         echo "Running RocksDB (Run $RUN) with policy $POLICY..."
         
@@ -78,12 +79,13 @@ for POLICY in "${POLICIES[@]}"; do
         if [ "$POLICY" == "autonuma" ]; then
             echo 1 | sudo tee /proc/sys/kernel/numa_balancing > /dev/null
             numactl --membind=${MEMBIND} --cpubind=0 "$DB_BENCH" --db=/tmp/rocksdb_bench --benchmarks="readrandom" --num=$NUM_KEYS --reads=2000000000 --value_size=1024 --use_existing_db=1 --duration=300 --mmap_read=true > "${RESULTS_DIR}/rocksdb_run_${POLICY}.log" 2>&1 &
-            PID=$!
-            wait $PID
-        else
-            echo 0 | sudo tee /proc/sys/kernel/numa_balancing > /dev/null
-            numactl --membind=${MEMBIND} --cpubind=0 "$DB_BENCH" --db=/tmp/rocksdb_bench --benchmarks="readrandom" --num=$NUM_KEYS --reads=2000000000 --value_size=1024 --use_existing_db=1 --duration=300 --mmap_read=true > "${RESULTS_DIR}/rocksdb_run_${POLICY}.log" 2>&1 &
-            PID=$!
+            wait $!
+            continue
+        fi
+
+        echo 0 | sudo tee /proc/sys/kernel/numa_balancing > /dev/null
+        numactl --membind=${MEMBIND} --cpubind=0 "$DB_BENCH" --db=/tmp/rocksdb_bench --benchmarks="readrandom" --num=$NUM_KEYS --reads=2000000000 --value_size=1024 --use_existing_db=1 --duration=300 --mmap_read=true > "${RESULTS_DIR}/rocksdb_run_${POLICY}.log" 2>&1 &
+        PID=$!
         
         sleep 1
         

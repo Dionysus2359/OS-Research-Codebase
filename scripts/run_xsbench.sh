@@ -56,10 +56,11 @@ fi
 # Assuming XSBench is cloned to workload/XSBench/openmp-threading and compiled
 XSBENCH_BIN="${PROJECT_ROOT}/workload/XSBench/openmp-threading/XSBench"
 
-for POLICY in "${POLICIES[@]}"; do
-    for RUN in $(seq 1 $RUNS); do
-        RESULTS_DIR="${RESULTS_BASE}/run_${RUN}"
-        mkdir -p "$RESULTS_DIR"
+for RUN in $(seq 1 $RUNS); do
+    RESULTS_DIR="${RESULTS_BASE}/run_${RUN}"
+    mkdir -p "$RESULTS_DIR"
+
+    for POLICY in "${POLICIES[@]}"; do
         
         echo "Running XSBench (Run $RUN) with policy $POLICY..."
         
