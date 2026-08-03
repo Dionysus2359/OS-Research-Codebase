@@ -33,6 +33,7 @@ done
 SCALE=${SCALE:-5}
 NUM_REQS=$((SCALE * 1000000))
 REQS_PER_CLIENT=$((NUM_REQS / 50))
+MEMCACHED_RAM=$((SCALE * 1024 + 2048))
 
 # Memcached ~10GB. FTC = 20% = ~2GB = 500,000 pages for scale 5 (5M reqs)
 # FTC scales linearly with SCALE
@@ -61,14 +62,14 @@ for POLICY in "${POLICIES[@]}"; do
         
         echo "Running Memcached (Run $RUN) with policy $POLICY..."
         
-        numactl --membind=${MEMBIND} --cpubind=0 memcached -m 10240 -p 11211 -u root > "${RESULTS_DIR}/memcached_${POLICY}.log" 2>&1 &
+        numactl --membind=${MEMBIND} --cpubind=0 memcached -m $MEMCACHED_RAM -p 11211 -u root > "${RESULTS_DIR}/memcached_${POLICY}.log" 2>&1 &
         PID=$!
         
         sleep 2
         
         # Phase 1: Load (No Daemon)
         echo " -> [Phase 1] Populating cache (100% Set)..."
-        memtier_benchmark -p 11211 -P memcache_binary -n $REQS_PER_CLIENT -c 50 -t 4 --ratio=1:0 > "${RESULTS_DIR}/memtier_load_${POLICY}.log"
+        memtier_benchmark -p 11211 -P memcache_binary --data-size=1024 -n $REQS_PER_CLIENT -c 50 -t 4 --key-minimum=1 --key-maximum=$NUM_REQS --key-pattern=S:S --ratio=1:0 > "${RESULTS_DIR}/memtier_load_${POLICY}.log"
         
         # Phase 2: Run (With Daemon)
         echo " -> [Phase 2] Executing read-heavy workload (1:10 Set:Get)..."
@@ -81,7 +82,7 @@ for POLICY in "${POLICIES[@]}"; do
         fi
         
         # Run read-heavy workload
-        memtier_benchmark -p 11211 -P memcache_binary -n $REQS_PER_CLIENT -c 50 -t 4 --ratio=1:10 > "${RESULTS_DIR}/memtier_run_${POLICY}.log"
+        memtier_benchmark -p 11211 -P memcache_binary --data-size=1024 --test-time=300 -c 50 -t 4 --key-minimum=1 --key-maximum=$NUM_REQS --key-pattern=G:G --ratio=1:10 > "${RESULTS_DIR}/memtier_run_${POLICY}.log"
         
         kill -INT $PID 2>/dev/null || true
         if [ "$POLICY" != "autonuma" ]; then
