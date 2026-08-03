@@ -285,7 +285,7 @@ else
     KERNELS=("bfs" "pr")
 fi
 
-POLICIES=("lru" "lfu" "decaying_lfu" "autonuma" "heuristic" "ml")
+POLICIES=("lru" "lfu" "decaying_lfu" "heuristic" "ml")
 
 if [ "$TRACE_MODE" == "true" ]; then
     POLICIES=("random")
