@@ -72,13 +72,13 @@ for POLICY in "${POLICIES[@]}"; do
         echo " -> [Phase 2] Executing read workload..."
         if [ "$POLICY" == "autonuma" ]; then
             echo 1 | sudo tee /proc/sys/kernel/numa_balancing > /dev/null
-            numactl --membind=${MEMBIND} --cpubind=0 "$DB_BENCH" --db=/tmp/rocksdb_bench --benchmarks="readrandom" --num=$NUM_KEYS --value_size=1024 --use_existing_db=1 --duration=300 > "${RESULTS_DIR}/rocksdb_run_${POLICY}.log" 2>&1 &
+            numactl --membind=${MEMBIND} --cpubind=0 "$DB_BENCH" --db=/tmp/rocksdb_bench --benchmarks="readrandom" --num=$NUM_KEYS --reads=2000000000 --value_size=1024 --use_existing_db=1 --duration=300 > "${RESULTS_DIR}/rocksdb_run_${POLICY}.log" 2>&1 &
             wait $!
             continue
         fi
 
         echo 0 | sudo tee /proc/sys/kernel/numa_balancing > /dev/null
-        numactl --membind=${MEMBIND} --cpubind=0 "$DB_BENCH" --db=/tmp/rocksdb_bench --benchmarks="readrandom" --num=$NUM_KEYS --value_size=1024 --use_existing_db=1 --duration=300 > "${RESULTS_DIR}/rocksdb_run_${POLICY}.log" 2>&1 &
+        numactl --membind=${MEMBIND} --cpubind=0 "$DB_BENCH" --db=/tmp/rocksdb_bench --benchmarks="readrandom" --num=$NUM_KEYS --reads=2000000000 --value_size=1024 --use_existing_db=1 --duration=300 > "${RESULTS_DIR}/rocksdb_run_${POLICY}.log" 2>&1 &
         PID=$!
         
         sleep 1
