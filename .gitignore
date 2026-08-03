@@ -24,6 +24,7 @@ workload/rocksdb/
 
 # Results (reproducible, not tracked)
 results/
+results_constrained/
 simulator/results_gauntlet/
 
 # Traces and large data
