@@ -82,7 +82,11 @@ for POLICY in "${POLICIES[@]}"; do
             echo 1 | sudo tee /proc/sys/kernel/numa_balancing > /dev/null
         else
             echo 0 | sudo tee /proc/sys/kernel/numa_balancing > /dev/null
-            sudo "$DAEMON_DIR/daemon" "$POLICY" --pid "$PID" --slow-node ${MEMBIND} --fast-tier-capacity "$FTC" --epoch-ms "$EPOCH_MS" > "${RESULTS_DIR}/${POLICY}_summary.csv" 2> "${RESULTS_DIR}/${POLICY}_stderr.log" &
+            
+            # Write mock workload_info so daemon breaks out of its polling loop
+            echo -e "${PID}\n0x0\n1\n1" | sudo tee /tmp/workload_info > /dev/null
+            
+            sudo "$DAEMON_DIR/daemon" "$POLICY" --pid "$PID" --slow-node ${MEMBIND} --fast-tier-capacity "$FTC" --max-promotions 4096 --max-demotions 4096 --epoch-ms "$EPOCH_MS" > "${RESULTS_DIR}/${POLICY}_summary.csv" 2> "${RESULTS_DIR}/${POLICY}_stderr.log" &
             DAEMON_PID=$!
         fi
         

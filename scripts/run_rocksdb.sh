@@ -67,7 +67,7 @@ for POLICY in "${POLICIES[@]}"; do
         
         # Phase 1: Load (No Daemon)
         echo " -> [Phase 1] Populating database..."
-        numactl --membind=${MEMBIND} --cpubind=0 "$DB_BENCH" --db=/tmp/rocksdb_bench --benchmarks="fillseq" --num=$NUM_KEYS --value_size=1024 --use_existing_db=0 > "${RESULTS_DIR}/rocksdb_load_${POLICY}.log" 2>&1
+        numactl --membind=${MEMBIND} --cpubind=0 "$DB_BENCH" --db=/tmp/rocksdb_bench --benchmarks="fillseq" --num=$NUM_KEYS --value_size=1024 --use_existing_db=0 --mmap_read=true > "${RESULTS_DIR}/rocksdb_load_${POLICY}.log" 2>&1
         
         echo " -> Dropping OS page cache..."
         sync && sudo sh -c 'echo 3 > /proc/sys/vm/drop_caches'
@@ -77,18 +77,20 @@ for POLICY in "${POLICIES[@]}"; do
         echo " -> [Phase 2] Executing read workload..."
         if [ "$POLICY" == "autonuma" ]; then
             echo 1 | sudo tee /proc/sys/kernel/numa_balancing > /dev/null
-            numactl --membind=${MEMBIND} --cpubind=0 "$DB_BENCH" --db=/tmp/rocksdb_bench --benchmarks="readrandom" --num=$NUM_KEYS --reads=2000000000 --value_size=1024 --use_existing_db=1 --duration=300 > "${RESULTS_DIR}/rocksdb_run_${POLICY}.log" 2>&1 &
-            wait $!
-            continue
-        fi
-
-        echo 0 | sudo tee /proc/sys/kernel/numa_balancing > /dev/null
-        numactl --membind=${MEMBIND} --cpubind=0 "$DB_BENCH" --db=/tmp/rocksdb_bench --benchmarks="readrandom" --num=$NUM_KEYS --reads=2000000000 --value_size=1024 --use_existing_db=1 --duration=300 > "${RESULTS_DIR}/rocksdb_run_${POLICY}.log" 2>&1 &
-        PID=$!
+            numactl --membind=${MEMBIND} --cpubind=0 "$DB_BENCH" --db=/tmp/rocksdb_bench --benchmarks="readrandom" --num=$NUM_KEYS --reads=2000000000 --value_size=1024 --use_existing_db=1 --duration=300 --mmap_read=true > "${RESULTS_DIR}/rocksdb_run_${POLICY}.log" 2>&1 &
+            PID=$!
+            wait $PID
+        else
+            echo 0 | sudo tee /proc/sys/kernel/numa_balancing > /dev/null
+            numactl --membind=${MEMBIND} --cpubind=0 "$DB_BENCH" --db=/tmp/rocksdb_bench --benchmarks="readrandom" --num=$NUM_KEYS --reads=2000000000 --value_size=1024 --use_existing_db=1 --duration=300 --mmap_read=true > "${RESULTS_DIR}/rocksdb_run_${POLICY}.log" 2>&1 &
+            PID=$!
         
         sleep 1
         
-        sudo "$DAEMON_DIR/daemon" "$POLICY" --pid "$PID" --slow-node ${MEMBIND} --fast-tier-capacity "$FTC" --epoch-ms "$EPOCH_MS" > "${RESULTS_DIR}/${POLICY}_summary.csv" 2> "${RESULTS_DIR}/${POLICY}_stderr.log" &
+        # Write mock workload_info so daemon breaks out of its polling loop
+        echo -e "${PID}\n0x0\n1\n1" | sudo tee /tmp/workload_info > /dev/null
+        
+        sudo "$DAEMON_DIR/daemon" "$POLICY" --pid "$PID" --slow-node ${MEMBIND} --fast-tier-capacity "$FTC" --max-promotions 4096 --max-demotions 4096 --epoch-ms "$EPOCH_MS" > "${RESULTS_DIR}/${POLICY}_summary.csv" 2> "${RESULTS_DIR}/${POLICY}_stderr.log" &
         DAEMON_PID=$!
         
         wait $PID
