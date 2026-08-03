@@ -86,7 +86,7 @@ def main():
         print(f"No run_* directories found in {target_dir}.")
         sys.exit(1)
         
-    policies = ['lru', 'lfu', 'decaying_lfu', 'ml', 'autonuma']
+    policies = ['lru', 'lfu', 'decaying_lfu', 'heuristic', 'ml', 'autonuma']
     
     # Prefix -> Policy -> list of metrics dictionaries
     aggregated_results = defaultdict(lambda: defaultdict(list))
@@ -121,6 +121,10 @@ def main():
                                 res['app_time'] = float(m.group(1)) / 1000.0
                         elif "gapbs" in target_dir.lower():
                             m = re.search(r'Average Time:\s+([\d\.]+)', content)
+                            if m:
+                                res['app_time'] = float(m.group(1))
+                        elif "xsbench" in target_dir.lower():
+                            m = re.search(r'Runtime:\s+([\d\.]+)', content)
                             if m:
                                 res['app_time'] = float(m.group(1))
                         else:
@@ -192,6 +196,9 @@ def main():
                                         if m: auto_res['app_time'] = float(m.group(1)) / 1000.0
                                     elif "gapbs" in target_dir.lower():
                                         m = re.search(r'Average Time:\s+([\d\.]+)', content)
+                                        if m: auto_res['app_time'] = float(m.group(1))
+                                    elif "xsbench" in target_dir.lower():
+                                        m = re.search(r'Runtime:\s+([\d\.]+)', content)
                                         if m: auto_res['app_time'] = float(m.group(1))
                                     else:
                                         m = re.search(r'User: ([\d\.]+)', content)
