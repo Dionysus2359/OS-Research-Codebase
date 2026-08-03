@@ -27,10 +27,10 @@ for ratio in "${RATIOS[@]}"; do
     ./run_redis.sh 5 --runs "$RUNS" --ftc-ratio "$ratio"
     
     # 3. Memcached
-    ./run_memcached.sh --runs "$RUNS" --ftc-ratio "$ratio"
+    ./run_memcached.sh --scale 5 --runs "$RUNS" --ftc-ratio "$ratio"
     
     # 4. RocksDB
-    ./run_rocksdb.sh --runs "$RUNS" --ftc-ratio "$ratio"
+    ./run_rocksdb.sh --scale 10 --runs "$RUNS" --ftc-ratio "$ratio"
     
     # 5. XSBench
     ./run_xsbench.sh --runs "$RUNS" --ftc-ratio "$ratio"

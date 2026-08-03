@@ -23,13 +23,18 @@ while [ $# -gt 0 ]; do
         --ftc-ratio) FTC_RATIO="$2"; shift ;;
         --runs) RUNS="$2"; shift ;;
         --epoch-ms) EPOCH_MS="$2"; shift ;;
+        --scale) SCALE="$2"; shift ;;
         --ml-only) ML_ONLY=true ;;
     esac
     shift
 done
 
-# RocksDB dataset ~10GB. FTC = 20% = ~2GB = 500,000 pages
-FTC=500000
+SCALE=${SCALE:-10}
+NUM_KEYS=$((SCALE * 1000000))
+
+# RocksDB dataset ~10GB for 10M keys. FTC = 20% = ~2GB = 500,000 pages for 10M keys
+# FTC scales linearly with SCALE
+FTC=$((50000 * SCALE))
 if [ "$FTC_RATIO" != "100" ]; then
     FTC=$((FTC * FTC_RATIO / 100))
     RESULTS_BASE="${PROJECT_ROOT}/results/rocksdb_capacity_${FTC_RATIO}"
@@ -55,15 +60,25 @@ for POLICY in "${POLICIES[@]}"; do
         
         echo "Running RocksDB (Run $RUN) with policy $POLICY..."
         
+        # Phase 1: Load (No Daemon)
+        echo " -> [Phase 1] Populating database..."
+        numactl --membind=${MEMBIND} --cpubind=0 "$DB_BENCH" --db=/tmp/rocksdb_bench --benchmarks="fillseq" --num=$NUM_KEYS --use_existing_db=0 > "${RESULTS_DIR}/rocksdb_load_${POLICY}.log" 2>&1
+        
+        echo " -> Dropping OS page cache..."
+        sync && sudo sh -c 'echo 3 > /proc/sys/vm/drop_caches'
+        sleep 2
+        
+        # Phase 2: Run (With Daemon)
+        echo " -> [Phase 2] Executing read workload..."
         if [ "$POLICY" == "autonuma" ]; then
             echo 1 | sudo tee /proc/sys/kernel/numa_balancing > /dev/null
-            numactl --membind=${MEMBIND} --cpubind=0 "$DB_BENCH" --benchmarks="fillseq,readrandom" --num=10000000 > "${RESULTS_DIR}/rocksdb_${POLICY}.log" 2>&1 &
+            numactl --membind=${MEMBIND} --cpubind=0 "$DB_BENCH" --db=/tmp/rocksdb_bench --benchmarks="readrandom" --num=$NUM_KEYS --use_existing_db=1 > "${RESULTS_DIR}/rocksdb_run_${POLICY}.log" 2>&1 &
             wait $!
             continue
         fi
 
         echo 0 | sudo tee /proc/sys/kernel/numa_balancing > /dev/null
-        numactl --membind=${MEMBIND} --cpubind=0 "$DB_BENCH" --benchmarks="fillseq,readrandom" --num=10000000 > "${RESULTS_DIR}/rocksdb_${POLICY}.log" 2>&1 &
+        numactl --membind=${MEMBIND} --cpubind=0 "$DB_BENCH" --db=/tmp/rocksdb_bench --benchmarks="readrandom" --num=$NUM_KEYS --use_existing_db=1 > "${RESULTS_DIR}/rocksdb_run_${POLICY}.log" 2>&1 &
         PID=$!
         
         sleep 1

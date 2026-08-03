@@ -40,9 +40,9 @@ for feature in "${FEATURES[@]}"; do
     
     # 2. Redis
     ./run_redis.sh 5 --runs "$RUNS" --ml-only
-    ./run_memcached.sh --runs "$RUNS" --ml-only
+    ./run_memcached.sh --scale 5 --runs "$RUNS" --ml-only
     # 4. RocksDB
-    ./run_rocksdb.sh --runs "$RUNS" --ml-only
+    ./run_rocksdb.sh --scale 10 --runs "$RUNS" --ml-only
     
     # 5. XSBench
     ./run_xsbench.sh --runs "$RUNS" --ml-only

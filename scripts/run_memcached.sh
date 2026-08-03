@@ -24,13 +24,19 @@ while [ $# -gt 0 ]; do
         --ftc-ratio) FTC_RATIO="$2"; shift ;;
         --runs) RUNS="$2"; shift ;;
         --epoch-ms) EPOCH_MS="$2"; shift ;;
+        --scale) SCALE="$2"; shift ;;
         --ml-only) ML_ONLY=true ;;
     esac
     shift
 done
 
-# Memcached typically configured for ~10GB. FTC = 20% = ~2GB = 500,000 pages
-FTC=500000
+SCALE=${SCALE:-5}
+NUM_REQS=$((SCALE * 1000000))
+REQS_PER_CLIENT=$((NUM_REQS / 50))
+
+# Memcached ~10GB. FTC = 20% = ~2GB = 500,000 pages for scale 5 (5M reqs)
+# FTC scales linearly with SCALE
+FTC=$((100000 * SCALE))
 if [ "$FTC_RATIO" != "100" ]; then
     FTC=$((FTC * FTC_RATIO / 100))
     RESULTS_BASE="${PROJECT_ROOT}/results/memcached_capacity_${FTC_RATIO}"
@@ -55,24 +61,27 @@ for POLICY in "${POLICIES[@]}"; do
         
         echo "Running Memcached (Run $RUN) with policy $POLICY..."
         
-        if [ "$POLICY" == "autonuma" ]; then
-            echo 1 | sudo tee /proc/sys/kernel/numa_balancing > /dev/null
-        else
-            echo 0 | sudo tee /proc/sys/kernel/numa_balancing > /dev/null
-        fi
-
         numactl --membind=${MEMBIND} --cpubind=0 memcached -m 10240 -p 11211 -u root > "${RESULTS_DIR}/memcached_${POLICY}.log" 2>&1 &
         PID=$!
         
         sleep 2
         
-        if [ "$POLICY" != "autonuma" ]; then
+        # Phase 1: Load (No Daemon)
+        echo " -> [Phase 1] Populating cache (100% Set)..."
+        memtier_benchmark -p 11211 -P memcache_binary -n $REQS_PER_CLIENT -c 50 -t 4 --ratio=1:0 > "${RESULTS_DIR}/memtier_load_${POLICY}.log"
+        
+        # Phase 2: Run (With Daemon)
+        echo " -> [Phase 2] Executing read-heavy workload (1:10 Set:Get)..."
+        if [ "$POLICY" == "autonuma" ]; then
+            echo 1 | sudo tee /proc/sys/kernel/numa_balancing > /dev/null
+        else
+            echo 0 | sudo tee /proc/sys/kernel/numa_balancing > /dev/null
             sudo "$DAEMON_DIR/daemon" "$POLICY" --pid "$PID" --slow-node ${MEMBIND} --fast-tier-capacity "$FTC" --epoch-ms "$EPOCH_MS" > "${RESULTS_DIR}/${POLICY}_summary.csv" 2> "${RESULTS_DIR}/${POLICY}_stderr.log" &
             DAEMON_PID=$!
         fi
         
-        # Run memtier_benchmark
-        memtier_benchmark -p 11211 -P memcache_binary -n 100000 -c 50 -t 4 --ratio=1:10 > "${RESULTS_DIR}/memtier_${POLICY}.log"
+        # Run read-heavy workload
+        memtier_benchmark -p 11211 -P memcache_binary -n $REQS_PER_CLIENT -c 50 -t 4 --ratio=1:10 > "${RESULTS_DIR}/memtier_run_${POLICY}.log"
         
         kill -INT $PID 2>/dev/null || true
         if [ "$POLICY" != "autonuma" ]; then

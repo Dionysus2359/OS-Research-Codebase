@@ -24,10 +24,10 @@ for ms in "${INTERVALS[@]}"; do
     ./run_redis.sh 5 --runs "$RUNS" --ml-only --epoch-ms "$ms"
     
     # 3. Memcached
-    ./run_memcached.sh --runs "$RUNS" --ml-only --epoch-ms "$ms"
+    ./run_memcached.sh --scale 5 --runs "$RUNS" --ml-only --epoch-ms "$ms"
     
     # 4. RocksDB
-    ./run_rocksdb.sh --runs "$RUNS" --ml-only --epoch-ms "$ms"
+    ./run_rocksdb.sh --scale 10 --runs "$RUNS" --ml-only --epoch-ms "$ms"
     
     # 5. XSBench
     ./run_xsbench.sh --runs "$RUNS" --ml-only --epoch-ms "$ms"
