@@ -35,6 +35,11 @@ NUM_REQS=$((SCALE * 1000000))
 REQS_PER_CLIENT=$((NUM_REQS / 50))
 MEMCACHED_RAM=$((SCALE * 1024 + 2048))
 
+if ! numactl -H | grep -q "node 2"; then
+    echo "[WARN] Node 2 not found! Falling back to Node 1."
+    MEMBIND=1
+fi
+
 # Memcached ~10GB. FTC = 20% = ~2GB = 500,000 pages for scale 5 (5M reqs)
 # FTC scales linearly with SCALE
 FTC=$((100000 * SCALE))
