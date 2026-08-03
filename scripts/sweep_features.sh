@@ -35,11 +35,20 @@ for feature in "${FEATURES[@]}"; do
     
     # 3. Run workload
     export RESULTS_DIR_SUFFIX="_ablation_${feature}"
-    ./run_gapbs.sh 25 --bfs --runs "$RUNS" --ml-only
-    ./run_redis.sh 1 --runs "$RUNS" --ml-only
+    # 1. GAPBS BFS
+    ./run_gapbs.sh 27 --bfs --runs "$RUNS" --ml-only
+    
+    # 2. Redis
+    ./run_redis.sh 5 --runs "$RUNS" --ml-only
     ./run_memcached.sh --runs "$RUNS" --ml-only
+    # 4. RocksDB
     ./run_rocksdb.sh --runs "$RUNS" --ml-only
+    
+    # 5. XSBench
     ./run_xsbench.sh --runs "$RUNS" --ml-only
+    
+    # 6. Synthetic Workload
+    ./run_baselines.sh --runs "$RUNS" --ml-only
     unset RESULTS_DIR_SUFFIX
     
     echo "Completed ablation for ${feature}"

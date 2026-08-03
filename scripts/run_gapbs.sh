@@ -44,6 +44,14 @@ while [ $# -gt 0 ]; do
     shift
 done
 
+if [ "$FTC_RATIO" != "100" ]; then
+    RESULTS_BASE="${PROJECT_ROOT}/results/gapbs_capacity_${FTC_RATIO}"
+fi
+
+if [ -n "$RESULTS_DIR_SUFFIX" ]; then
+    RESULTS_BASE="${RESULTS_BASE}${RESULTS_DIR_SUFFIX}"
+fi
+
 # Force PMU settings
 sudo sysctl -w kernel.perf_event_max_sample_rate=50000 > /dev/null 2>&1 || true
 echo 0 | sudo tee /proc/sys/kernel/perf_cpu_time_max_percent > /dev/null || true
@@ -117,11 +125,6 @@ run_gapbs_kernel() {
     if [ "$FTC_RATIO" != "100" ]; then
         # Ensure floating point or integer division works (FTC * RATIO / 100)
         FTC=$((FTC * FTC_RATIO / 100))
-        RESULTS_BASE="${PROJECT_ROOT}/results/gapbs_capacity_${FTC_RATIO}"
-    fi
-    
-    if [ -n "$RESULTS_DIR_SUFFIX" ]; then
-        RESULTS_BASE="${RESULTS_BASE}${RESULTS_DIR_SUFFIX}"
     fi
     
     if [ "$SCALE" -ge 23 ]; then
@@ -282,7 +285,7 @@ else
     KERNELS=("bfs" "pr")
 fi
 
-POLICIES=("lru" "lfu" "decaying_lfu" "ml")
+POLICIES=("lru" "lfu" "decaying_lfu" "autonuma" "heuristic" "ml")
 
 if [ "$TRACE_MODE" == "true" ]; then
     POLICIES=("random")

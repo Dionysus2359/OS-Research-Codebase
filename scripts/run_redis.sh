@@ -49,6 +49,14 @@ while [ $# -gt 0 ]; do
     shift
 done
 
+if [ "$FTC_RATIO" != "100" ]; then
+    RESULTS_BASE="${PROJECT_ROOT}/results/redis_capacity_${FTC_RATIO}"
+fi
+
+if [ -n "$RESULTS_DIR_SUFFIX" ]; then
+    RESULTS_BASE="${RESULTS_BASE}${RESULTS_DIR_SUFFIX}"
+fi
+
 # Automatically enable LARGE_MODE if SCALE >= 5 to prevent FTC choke
 if [ "$SCALE" -ge 5 ]; then
     LARGE_MODE=true
@@ -100,11 +108,6 @@ run_redis_workload() {
 
     if [ "$FTC_RATIO" != "100" ]; then
         FTC=$((FTC * FTC_RATIO / 100))
-        RESULTS_BASE="${PROJECT_ROOT}/results/redis_capacity_${FTC_RATIO}"
-    fi
-
-    if [ -n "$RESULTS_DIR_SUFFIX" ]; then
-        RESULTS_BASE="${RESULTS_BASE}${RESULTS_DIR_SUFFIX}"
     fi
 
     # TRAP 1: Start Redis with BGSAVE disabled (--save "") on the slow node
@@ -252,7 +255,7 @@ run_redis_autonuma() {
     echo "Done: redis_autonuma"
 }
 
-POLICIES=("lru" "lfu" "decaying_lfu" "ml")
+POLICIES=("lru" "lfu" "decaying_lfu" "autonuma" "heuristic" "ml")
 
 if [ "$TRACE_MODE" == "true" ]; then
     POLICIES=("random")

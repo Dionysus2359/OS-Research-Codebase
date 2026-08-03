@@ -17,14 +17,14 @@ for ratio in "${RATIOS[@]}"; do
     echo "=========================================="
     
     # 1. GAPBS BFS (and PR for the 20% baseline)
-    ./run_gapbs.sh 25 --bfs --runs "$RUNS" --ftc-ratio "$ratio"
+    ./run_gapbs.sh 27 --bfs --runs "$RUNS" --ftc-ratio "$ratio"
     if [ "$ratio" == "20" ]; then
         echo "Running PageRank (PR) for baseline 20% capacity..."
-        ./run_gapbs.sh 25 --pr --runs "$RUNS" --ftc-ratio "$ratio"
+        ./run_gapbs.sh 27 --pr --runs "$RUNS" --ftc-ratio "$ratio"
     fi
     
     # 2. Redis
-    ./run_redis.sh 1 --runs "$RUNS" --ftc-ratio "$ratio"
+    ./run_redis.sh 5 --runs "$RUNS" --ftc-ratio "$ratio"
     
     # 3. Memcached
     ./run_memcached.sh --runs "$RUNS" --ftc-ratio "$ratio"
@@ -34,6 +34,9 @@ for ratio in "${RATIOS[@]}"; do
     
     # 5. XSBench
     ./run_xsbench.sh --runs "$RUNS" --ftc-ratio "$ratio"
+    
+    # 6. Synthetic Workload
+    ./run_baselines.sh --runs "$RUNS" --ftc-ratio "$ratio"
 done
 
 echo "Capacity Sweep Complete!"

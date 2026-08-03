@@ -50,8 +50,14 @@ run_daemon_baseline() {
         sleep 0.25
     done
 
+    # Compute adjusted FTC for synthetic workload
+    FTC=410
+    if [ "$FTC_RATIO" != "100" ]; then
+        FTC=$((FTC * FTC_RATIO / 100))
+    fi
+
     # Start daemon with workload PID
-    DAEMON_ARGS=("--slow-node" "1" "--fast-tier-capacity" "410" "--max-promotions" "256" "--max-demotions" "256")
+    DAEMON_ARGS=("--slow-node" "1" "--fast-tier-capacity" "$FTC" "--max-promotions" "256" "--max-demotions" "256" "--epoch-ms" "$EPOCH_MS")
     if [ "$TRACE_MODE" == "true" ]; then
         DAEMON_ARGS+=("--trace" "--trace-dir" "${PROJECT_ROOT}/ml/traces")
     fi
@@ -125,14 +131,27 @@ sudo mkdir -p /root/results
 
 TRACE_MODE=false
 ML_ONLY=false
+FTC_RATIO=100
+EPOCH_MS=100
+
 while [ $# -gt 0 ]; do
     case "$1" in
         --trace) TRACE_MODE=true; mkdir -p "${PROJECT_ROOT}/ml/traces" ;;
         --ml-only) ML_ONLY=true ;;
         --runs) NUM_RUNS="$2"; shift ;;
+        --ftc-ratio) FTC_RATIO="$2"; shift ;;
+        --epoch-ms) EPOCH_MS="$2"; shift ;;
     esac
     shift
 done
+
+if [ "$FTC_RATIO" != "100" ]; then
+    RESULTS_BASE="${PROJECT_ROOT}/results/synthetic_capacity_${FTC_RATIO}"
+fi
+
+if [ -n "$RESULTS_DIR_SUFFIX" ]; then
+    RESULTS_BASE="${RESULTS_BASE}${RESULTS_DIR_SUFFIX}"
+fi
 
 # ---- Execute Baselines ----
 if [ "$TRACE_MODE" == "true" ]; then
@@ -159,6 +178,7 @@ for RUN in $(seq 1 $NUM_RUNS); do
         run_daemon_baseline "lfu"
         run_daemon_baseline "decaying_lfu"
         run_autonuma_baseline
+        run_daemon_baseline "heuristic"
         run_daemon_baseline "ml"
     fi
 done
