@@ -46,9 +46,10 @@ if [ -n "$RESULTS_DIR_SUFFIX" ]; then
 fi
 
 sudo sysctl -w kernel.perf_event_max_sample_rate=50000 > /dev/null 2>&1 || true
+echo 0 | sudo tee /proc/sys/kernel/perf_cpu_time_max_percent > /dev/null || true
 make -C "$DAEMON_DIR" clean && make -C "$DAEMON_DIR"
 
-POLICIES=("lru" "lfu" "decaying_lfu" "autonuma" "heuristic" "ml")
+POLICIES=("lru" "lfu" "decaying_lfu" "heuristic" "ml" "autonuma")
 if [ "$ML_ONLY" == "true" ]; then
     POLICIES=("ml")
 fi
@@ -66,13 +67,13 @@ for RUN in $(seq 1 $RUNS); do
         
         if [ "$POLICY" == "autonuma" ]; then
             echo 1 | sudo tee /proc/sys/kernel/numa_balancing > /dev/null
-            numactl --membind=${MEMBIND} --cpubind=0 "$XSBENCH_BIN" -s large -m event > "${RESULTS_DIR}/xsbench_${POLICY}_stdout.log" &
+            numactl --membind=${MEMBIND} --cpubind=0 "$XSBENCH_BIN" -s large -m event -l 1500000000 > "${RESULTS_DIR}/xsbench_${POLICY}_stdout.log" &
             wait $!
             continue
         fi
         
         echo 0 | sudo tee /proc/sys/kernel/numa_balancing > /dev/null
-        numactl --membind=${MEMBIND} --cpubind=0 "$XSBENCH_BIN" -s large -m event > "${RESULTS_DIR}/xsbench_${POLICY}_stdout.log" &
+        numactl --membind=${MEMBIND} --cpubind=0 "$XSBENCH_BIN" -s large -m event -l 1500000000 > "${RESULTS_DIR}/xsbench_${POLICY}_stdout.log" &
         PID=$!
         sleep 2
         
