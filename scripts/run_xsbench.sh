@@ -34,8 +34,8 @@ if ! numactl -H | grep -q "node 2"; then
 fi
 
 
-# XSBench Large is ~6GB. FTC = 20% = ~1.2GB = ~300,000 pages
-FTC=300000
+# XSBench XL is ~40GB. FTC = 20% = 8GB = 2,000,000 pages
+FTC=2000000
 if [ "$FTC_RATIO" != "100" ]; then
     FTC=$((FTC * FTC_RATIO / 100))
     RESULTS_BASE="${PROJECT_ROOT}/results/xsbench_capacity_${FTC_RATIO}"
@@ -67,13 +67,13 @@ for RUN in $(seq 1 $RUNS); do
         
         if [ "$POLICY" == "autonuma" ]; then
             echo 1 | sudo tee /proc/sys/kernel/numa_balancing > /dev/null
-            numactl --membind=${MEMBIND} --cpubind=0 "$XSBENCH_BIN" -s large -m event -l 1500000000 > "${RESULTS_DIR}/xsbench_${POLICY}_stdout.log" &
+            numactl --membind=${MEMBIND} --cpubind=0 "$XSBENCH_BIN" -s XL -m event -l 1500000000 > "${RESULTS_DIR}/xsbench_${POLICY}_stdout.log" &
             wait $!
             continue
         fi
         
         echo 0 | sudo tee /proc/sys/kernel/numa_balancing > /dev/null
-        numactl --membind=${MEMBIND} --cpubind=0 "$XSBENCH_BIN" -s large -m event -l 1500000000 > "${RESULTS_DIR}/xsbench_${POLICY}_stdout.log" &
+        numactl --membind=${MEMBIND} --cpubind=0 "$XSBENCH_BIN" -s XL -m event -l 1500000000 > "${RESULTS_DIR}/xsbench_${POLICY}_stdout.log" &
         PID=$!
         sleep 2
         
@@ -83,7 +83,7 @@ for RUN in $(seq 1 $RUNS); do
         sudo "$DAEMON_DIR/daemon" "$POLICY" --pid "$PID" --slow-node ${MEMBIND} --fast-tier-capacity "$FTC" --max-promotions 1024 --max-demotions 1024 --epoch-ms "$EPOCH_MS" > "${RESULTS_DIR}/xsbench_${POLICY}_summary.csv" 2> "${RESULTS_DIR}/xsbench_${POLICY}_stderr.log" &
         DAEMON_PID=$!
         
-        wait $PID
+        wait $PID || true
         sudo kill -INT $DAEMON_PID 2>/dev/null || true
         wait $DAEMON_PID 2>/dev/null || true
     done
