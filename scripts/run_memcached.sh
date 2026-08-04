@@ -40,9 +40,10 @@ if ! numactl -H | grep -q "node 2"; then
     MEMBIND=1
 fi
 
-# Memcached ~10GB. FTC = 20% = ~2GB = 500,000 pages for scale 5 (5M reqs)
-# FTC scales linearly with SCALE
-FTC=$((100000 * SCALE))
+# Memcached ~10GB. The Gaussian hot set is very small.
+# To stress the CXL tier, FTC must be 20% of the ACTIVE working set, not total dataset.
+# Using 2500 pages per scale (Scale 30 = 75,000 pages = ~300 MB FTC) to force evictions.
+FTC=$((2500 * SCALE))
 if [ "$FTC_RATIO" != "100" ]; then
     FTC=$((FTC * FTC_RATIO / 100))
     RESULTS_BASE="${PROJECT_ROOT}/results/memcached_capacity_${FTC_RATIO}"
