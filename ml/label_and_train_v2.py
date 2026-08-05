@@ -10,7 +10,9 @@ traces = {
     'synthetic': 'traces/trace_random_synthetic.csv',
     'bfs':       'traces/trace_random_bfs.csv',
     'pagerank':  'traces/trace_random_pr.csv',
-    'redis':     'traces/trace_random_redis.csv'
+    'redis':     'traces/trace_random_redis.csv',
+    'rocksdb':   'traces/trace_random_rocksdb.csv',
+    'xsbench':   'traces/trace_random_xsbench.csv'
 }
 
 print("Loading trace data and processing workloads one by one...")
