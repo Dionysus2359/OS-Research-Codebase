@@ -16,9 +16,11 @@ FTC_RATIO=100
 RUNS=3
 EPOCH_MS=100
 ML_ONLY=false
+TRACE_MODE=false
 
 while [ $# -gt 0 ]; do
     case "$1" in
+        --trace) TRACE_MODE=true; mkdir -p "${PROJECT_ROOT}/ml/traces" ;;
         --ftc-ratio) FTC_RATIO="$2"; shift ;;
         --runs) RUNS="$2"; shift ;;
         --epoch-ms) EPOCH_MS="$2"; shift ;;
@@ -50,7 +52,10 @@ echo 0 | sudo tee /proc/sys/kernel/perf_cpu_time_max_percent > /dev/null || true
 make -C "$DAEMON_DIR" clean && make -C "$DAEMON_DIR"
 
 POLICIES=("lru" "lfu" "decaying_lfu" "heuristic" "ml" "autonuma")
-if [ "$ML_ONLY" == "true" ]; then
+if [ "$TRACE_MODE" == "true" ]; then
+    POLICIES=("random")
+    RUNS=${RUNS:-1}
+elif [ "$ML_ONLY" == "true" ]; then
     POLICIES=("ml")
 fi
 
@@ -80,12 +85,23 @@ for RUN in $(seq 1 $RUNS); do
         # Write mock workload_info so daemon breaks out of its polling loop
         echo -e "${PID}\n0x0\n1\n1" | sudo tee /tmp/workload_info > /dev/null
         
-        sudo "$DAEMON_DIR/daemon" "$POLICY" --pid "$PID" --slow-node ${MEMBIND} --fast-tier-capacity "$FTC" --max-promotions 1024 --max-demotions 1024 --epoch-ms "$EPOCH_MS" > "${RESULTS_DIR}/xsbench_${POLICY}_summary.csv" 2> "${RESULTS_DIR}/xsbench_${POLICY}_stderr.log" &
+        DAEMON_ARGS=("--slow-node" "${MEMBIND}" "--fast-tier-capacity" "${FTC}" "--max-promotions" "1024" "--max-demotions" "1024" "--epoch-ms" "${EPOCH_MS}")
+        if [ "$TRACE_MODE" == "true" ]; then
+            DAEMON_ARGS+=("--trace" "--trace-dir" "${PROJECT_ROOT}/ml/traces")
+        fi
+        
+        sudo "$DAEMON_DIR/daemon" "$POLICY" --pid "$PID" "${DAEMON_ARGS[@]}" > "${RESULTS_DIR}/xsbench_${POLICY}_summary.csv" 2> "${RESULTS_DIR}/xsbench_${POLICY}_stderr.log" &
         DAEMON_PID=$!
         
         wait $PID || true
         sudo kill -INT $DAEMON_PID 2>/dev/null || true
         wait $DAEMON_PID 2>/dev/null || true
+        
+        if [ "$TRACE_MODE" == "true" ]; then
+            REAL_USER=${SUDO_USER:-$USER}
+            sudo chown $REAL_USER:$REAL_USER "${PROJECT_ROOT}/ml/traces/trace_${POLICY}.csv" 2>/dev/null || true
+            mv "${PROJECT_ROOT}/ml/traces/trace_${POLICY}.csv" "${PROJECT_ROOT}/ml/traces/trace_${POLICY}_xsbench.csv" 2>/dev/null || true
+        fi
     done
 done
 echo "XSBench evaluation complete!"
